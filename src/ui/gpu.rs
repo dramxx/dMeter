@@ -42,7 +42,7 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData, mode: DisplayMode, 
         return;
     }
 
-    let bar_width = ((inner.width / 3) as usize).max(10);
+    let bar_width = (inner.width as usize).saturating_sub(8).max(10);
 
     let mut y = inner.y;
 

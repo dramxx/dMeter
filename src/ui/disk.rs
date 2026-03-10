@@ -27,9 +27,22 @@ pub fn render_disk(f: &mut Frame, area: Rect, disks: &[DiskData]) {
 
     let bar_width = ((inner.width / 3) as usize).max(8);
 
+    let disks: Vec<_> = disks.iter().take(3).collect();
+    let max_label_width = disks
+        .iter()
+        .map(|d| {
+            if d.name.is_empty() {
+                d.mount_point.len()
+            } else {
+                d.mount_point.len() + d.filesystem.len() + 3
+            }
+        })
+        .max()
+        .unwrap_or(0);
+
     let mut y = inner.y;
 
-    for disk in disks.iter().take(3) {
+    for disk in disks {
         if y >= inner.y.saturating_add(inner.height) {
             break;
         }
@@ -52,10 +65,12 @@ pub fn render_disk(f: &mut Frame, area: Rect, disks: &[DiskData]) {
             format!("{} ({})", disk.mount_point, disk.filesystem)
         };
 
+        let padded_label = format!("{:<width$}", label, width = max_label_width);
+
         f.render_widget(
             Paragraph::new(Span::raw(format!(
                 "{} [{}] {} / {}",
-                label, bar, used, total
+                padded_label, bar, used, total
             )))
             .style(Style::default().fg(color)),
             Rect::new(

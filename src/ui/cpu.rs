@@ -28,7 +28,7 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, mode: DisplayMode, 
         return;
     }
 
-    let bar_width = ((inner.width / 3) as usize).max(10);
+    let bar_width = (inner.width as usize).saturating_sub(8).max(10);
     let bar = render_bar(data.usage, bar_width);
     let color = get_usage_color(data.usage);
 

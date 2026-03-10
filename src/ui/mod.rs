@@ -1,4 +1,3 @@
-pub mod apps;
 pub mod colors;
 pub mod cpu;
 pub mod disk;
@@ -8,8 +7,6 @@ pub mod layout;
 pub mod memory;
 pub mod network;
 
-pub use apps::*;
-pub use colors::*;
 pub use cpu::*;
 pub use disk::*;
 pub use gpu::*;

@@ -1,6 +1,5 @@
 use crate::state::GpuData;
-use crate::ui::layout::DisplayMode;
-use crate::utils::{get_temp_color, get_usage_color, render_bar, render_sparkline};
+use crate::utils::{format_bytes, get_temp_color, get_usage_color, render_bar};
 use ratatui::{
     layout::Rect,
     style::Style,
@@ -9,23 +8,7 @@ use ratatui::{
     Frame,
 };
 
-fn format_bytes(bytes: u64) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = KB * 1024;
-    const GB: u64 = MB * 1024;
-
-    if bytes >= GB {
-        format!("{:.1} GB", bytes as f64 / GB as f64)
-    } else if bytes >= MB {
-        format!("{:.1} MB", bytes as f64 / MB as f64)
-    } else if bytes >= KB {
-        format!("{:.1} KB", bytes as f64 / KB as f64)
-    } else {
-        format!("{} B", bytes)
-    }
-}
-
-pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData, mode: DisplayMode, history: &[f32]) {
+pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData) {
     if area.width < 4 || area.height < 2 {
         return;
     }
@@ -38,11 +21,11 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData, mode: DisplayMode, 
     f.render_widget(block, area);
 
     let inner = crate::ui::layout::safe_inner(area, 1);
-    if inner.width < 4 || inner.height < 1 {
+    if inner.width < 4 || inner.height < 4 {
         return;
     }
 
-    let bar_width = (inner.width as usize).saturating_sub(8).max(10);
+    let bar_width = ((inner.width as usize).saturating_sub(8).max(10) * 7) / 10;
 
     let mut y = inner.y;
 
@@ -50,12 +33,7 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData, mode: DisplayMode, 
         f.render_widget(
             Paragraph::new(Span::raw(data.name.clone()))
                 .style(Style::default().fg(crate::ui::colors::Colors::muted_text())),
-            Rect::new(
-                inner.x,
-                y,
-                inner.x.saturating_add(inner.width),
-                y.saturating_add(1),
-            ),
+            Rect::new(inner.x, y, inner.width, 1),
         );
         return;
     }
@@ -66,24 +44,14 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData, mode: DisplayMode, 
     f.render_widget(
         Paragraph::new(Span::raw(&data.name))
             .style(Style::default().fg(ratatui::style::Color::White)),
-        Rect::new(
-            inner.x,
-            y,
-            inner.x.saturating_add(inner.width),
-            y.saturating_add(1),
-        ),
+        Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
 
     f.render_widget(
         Paragraph::new(Span::raw(format!("GPU  [{}] {:.1}%", gpu_bar, data.usage)))
             .style(Style::default().fg(gpu_color)),
-        Rect::new(
-            inner.x,
-            y,
-            inner.x.saturating_add(inner.width),
-            y.saturating_add(1),
-        ),
+        Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
 
@@ -102,12 +70,7 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData, mode: DisplayMode, 
             mem_bar, mem_used, mem_total
         )))
         .style(Style::default().fg(ratatui::style::Color::Cyan)),
-        Rect::new(
-            inner.x,
-            y,
-            inner.x.saturating_add(inner.width),
-            y.saturating_add(1),
-        ),
+        Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
 
@@ -124,27 +87,7 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData, mode: DisplayMode, 
 
         f.render_widget(
             Paragraph::new(Span::raw(line)).style(Style::default().fg(temp_color)),
-            Rect::new(
-                inner.x,
-                y,
-                inner.x.saturating_add(inner.width),
-                y.saturating_add(1),
-            ),
-        );
-        y = y.saturating_add(1);
-    }
-
-    if (mode == DisplayMode::Standard || mode == DisplayMode::Spacious) && !history.is_empty() {
-        let sparkline = render_sparkline(history, bar_width);
-        f.render_widget(
-            Paragraph::new(Span::raw(sparkline))
-                .style(Style::default().fg(ratatui::style::Color::Magenta)),
-            Rect::new(
-                inner.x,
-                y,
-                inner.x.saturating_add(bar_width as u16),
-                y.saturating_add(1),
-            ),
+            Rect::new(inner.x, y, inner.width, 1),
         );
     }
 }

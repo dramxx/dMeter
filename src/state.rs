@@ -37,8 +37,6 @@ pub struct NetworkData {
     pub ip_address: String,
     pub upload_speed: u64,
     pub download_speed: u64,
-    pub total_sent: u64,
-    pub total_received: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -48,13 +46,6 @@ pub struct DiskData {
     pub total: u64,
     pub used: u64,
     pub filesystem: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ProcessData {
-    pub name: String,
-    pub cpu_usage: f32,
-    pub memory_mb: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -74,7 +65,6 @@ pub struct SystemData {
     pub network: NetworkData,
     pub disks: Vec<DiskData>,
     pub system: SystemInfoData,
-    pub processes: Vec<ProcessData>,
 }
 
 pub struct HistoryBuffer {

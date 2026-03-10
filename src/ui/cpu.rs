@@ -46,24 +46,14 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, mode: DisplayMode, 
     f.render_widget(
         Paragraph::new(Span::raw(format!("{} {}", cpu_name, freq)))
             .style(Style::default().fg(ratatui::style::Color::White)),
-        Rect::new(
-            inner.x,
-            y,
-            inner.x.saturating_add(inner.width),
-            y.saturating_add(1),
-        ),
+        Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
 
     f.render_widget(
         Paragraph::new(Span::raw(format!("[{}] {:.1}%", bar, data.usage)))
             .style(Style::default().fg(color)),
-        Rect::new(
-            inner.x,
-            y,
-            inner.x.saturating_add(inner.width),
-            y.saturating_add(1),
-        ),
+        Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
 
@@ -72,12 +62,7 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, mode: DisplayMode, 
         f.render_widget(
             Paragraph::new(Span::raw(format!("Temperature: {:.0}°C", temp)))
                 .style(Style::default().fg(temp_color)),
-            Rect::new(
-                inner.x,
-                y,
-                inner.x.saturating_add(inner.width),
-                y.saturating_add(1),
-            ),
+            Rect::new(inner.x, y, inner.width, 1),
         );
         y = y.saturating_add(1);
     }
@@ -85,12 +70,7 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, mode: DisplayMode, 
     f.render_widget(
         Paragraph::new(Span::raw(cores))
             .style(Style::default().fg(crate::ui::colors::Colors::muted_text())),
-        Rect::new(
-            inner.x,
-            y,
-            inner.x.saturating_add(inner.width),
-            y.saturating_add(1),
-        ),
+        Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
 
@@ -99,12 +79,7 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, mode: DisplayMode, 
         f.render_widget(
             Paragraph::new(Span::raw(sparkline))
                 .style(Style::default().fg(ratatui::style::Color::Blue)),
-            Rect::new(
-                inner.x,
-                y,
-                inner.x.saturating_add(bar_width as u16),
-                y.saturating_add(1),
-            ),
+            Rect::new(inner.x, y, bar_width as u16, 1),
         );
     }
 }

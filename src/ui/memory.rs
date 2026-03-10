@@ -46,12 +46,7 @@ pub fn render_memory(f: &mut Frame, area: Rect, data: &MemoryData, show_swap: bo
             mem_bar, mem_used, mem_total
         )))
         .style(Style::default().fg(mem_color)),
-        Rect::new(
-            inner.x,
-            y,
-            inner.x.saturating_add(inner.width),
-            y.saturating_add(1),
-        ),
+        Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
 
@@ -67,12 +62,7 @@ pub fn render_memory(f: &mut Frame, area: Rect, data: &MemoryData, show_swap: bo
                 swap_bar, swap_used, swap_total
             )))
             .style(Style::default().fg(ratatui::style::Color::Yellow)),
-            Rect::new(
-                inner.x,
-                y,
-                inner.x.saturating_add(inner.width),
-                y.saturating_add(1),
-            ),
+            Rect::new(inner.x, y, inner.width, 1),
         );
     }
 }

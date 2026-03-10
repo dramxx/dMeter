@@ -24,12 +24,7 @@ pub fn render_header(f: &mut Frame, area: Rect, data: &SystemData) {
     f.render_widget(
         Paragraph::new(Span::raw(left).bold())
             .style(Style::default().fg(ratatui::style::Color::Cyan)),
-        Rect::new(
-            area.x.saturating_add(1),
-            area.y,
-            area.x.saturating_add(1).saturating_add(left.len() as u16),
-            area.y.saturating_add(1),
-        ),
+        Rect::new(area.x.saturating_add(1), area.y, left.len() as u16, 1),
     );
 
     let hostname = &data.system.hostname;
@@ -45,12 +40,7 @@ pub fn render_header(f: &mut Frame, area: Rect, data: &SystemData) {
     if right_x >= area.x {
         f.render_widget(
             Paragraph::new(Span::raw(right)),
-            Rect::new(
-                right_x,
-                area.y,
-                right_x.saturating_add(right_len),
-                area.y.saturating_add(1),
-            ),
+            Rect::new(right_x, area.y, right_len, 1),
         );
     }
 }
@@ -69,27 +59,19 @@ pub fn render_system_info(f: &mut Frame, area: Rect, data: &SystemData) {
 
     let os = format!("{} {}", data.system.os_name, data.system.os_version);
     let uptime = crate::utils::format_uptime(data.system.uptime);
-    let load = format!(
-        "{:.2} / {:.2} / {:.2}",
-        data.system.load_avg.0, data.system.load_avg.1, data.system.load_avg.2
-    );
-    let info = format!("{}  ·  Uptime: {}  ·  Load: {}", os, uptime, load);
+    let info = format!("{}  ·  Uptime: {}", os, uptime);
 
     let info_len = info.len() as u16;
     if info_len.saturating_add(2) < area.width {
         f.render_widget(
             Paragraph::new(Span::raw(info))
                 .style(Style::default().fg(ratatui::style::Color::White)),
-            Rect::new(
-                area.x.saturating_add(1),
-                area.y,
-                area.x.saturating_add(1).saturating_add(info_len),
-                area.y.saturating_add(1),
-            ),
+            Rect::new(area.x.saturating_add(1), area.y, info_len, 1),
         );
     }
 }
 
+#[allow(dead_code)]
 pub fn render_minimum_size_warning(f: &mut Frame, area: Rect) {
     let text = "Terminal too small. Please resize to at least 80x24.";
 
@@ -114,8 +96,5 @@ pub fn render_minimum_size_warning(f: &mut Frame, area: Rect) {
         .y
         .saturating_add(area.height.saturating_sub(height) / 2);
 
-    f.render_widget(
-        paragraph,
-        Rect::new(x, y, x.saturating_add(width), y.saturating_add(height)),
-    );
+    f.render_widget(paragraph, Rect::new(x, y, width, height));
 }

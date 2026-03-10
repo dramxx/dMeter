@@ -1,5 +1,5 @@
 use crate::state::NetworkData;
-use crate::utils::{format_bytes, format_bytes_per_sec};
+use crate::utils::format_bytes_per_sec;
 use ratatui::{
     layout::Rect,
     style::Style,
@@ -36,12 +36,7 @@ pub fn render_network(f: &mut Frame, area: Rect, data: &NetworkData) {
     f.render_widget(
         Paragraph::new(Span::raw(adapter_info))
             .style(Style::default().fg(ratatui::style::Color::White)),
-        Rect::new(
-            inner.x,
-            y,
-            inner.x.saturating_add(inner.width),
-            y.saturating_add(1),
-        ),
+        Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
 
@@ -51,42 +46,13 @@ pub fn render_network(f: &mut Frame, area: Rect, data: &NetworkData) {
     f.render_widget(
         Paragraph::new(Span::raw(format!("↑ {}", up_speed)))
             .style(Style::default().fg(ratatui::style::Color::Green)),
-        Rect::new(
-            inner.x,
-            y,
-            inner.x.saturating_add(inner.width),
-            y.saturating_add(1),
-        ),
+        Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
 
     f.render_widget(
         Paragraph::new(Span::raw(format!("↓ {}", down_speed)))
             .style(Style::default().fg(ratatui::style::Color::Red)),
-        Rect::new(
-            inner.x,
-            y,
-            inner.x.saturating_add(inner.width),
-            y.saturating_add(1),
-        ),
-    );
-    y = y.saturating_add(1);
-
-    let total_sent = format_bytes(data.total_sent);
-    let total_received = format_bytes(data.total_received);
-    let total_combined = format_bytes(data.total_sent.saturating_add(data.total_received));
-
-    f.render_widget(
-        Paragraph::new(Span::raw(format!(
-            "Total ↑ {}  ↓ {}  ∑ {}",
-            total_sent, total_received, total_combined
-        )))
-        .style(Style::default().fg(crate::ui::colors::Colors::secondary_text())),
-        Rect::new(
-            inner.x,
-            y,
-            inner.x.saturating_add(inner.width),
-            y.saturating_add(1),
-        ),
+        Rect::new(inner.x, y, inner.width, 1),
     );
 }

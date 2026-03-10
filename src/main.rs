@@ -15,8 +15,8 @@ use crate::collectors::SystemCollector;
 use crate::config::CliArgs;
 use crate::state::{HistoryBuffer, SystemData};
 use crate::ui::{
-    get_display_mode, render_apps, render_cpu, render_disk, render_gpu, render_header,
-    render_memory, render_minimum_size_warning, render_network, render_system_info,
+    get_display_mode, render_cpu, render_disk, render_gpu, render_header, render_memory,
+    render_network, render_system_info,
 };
 use clap::Parser;
 
@@ -262,13 +262,9 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &App) {
         crate::ui::DisplayMode::Compact,
         app.cpu_history.get(),
     );
-    render_gpu(
-        f,
-        gpu_area,
-        &app.data.gpu,
-        crate::ui::DisplayMode::Compact,
-        app.gpu_history.get(),
-    );
+    if app.show_gpu {
+        render_gpu(f, gpu_area, &app.data.gpu);
+    }
     render_memory(f, mem_area, &app.data.memory, app.show_swap);
     render_network(f, net_area, &app.data.network);
     render_disk(f, disk_area, &app.data.disks);
@@ -276,9 +272,9 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &App) {
 
 fn render_standard_mode(f: &mut Frame, area: Rect, app: &App) {
     // Panel heights
-    let panel_height = 5u16;
-    let history_height = 2u16;
-    let network_height = 4u16;
+    let panel_height = 7u16;
+    let history_height = 3u16;
+    let network_height = 5u16;
 
     // Calculate width for each column
     let col1_width = area.width / 3;
@@ -309,13 +305,6 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &App) {
         network_height,
     );
 
-    // Apps row (takes remaining space below network/disk)
-    let apps_y = network_y + network_height;
-    let apps_height = area
-        .height
-        .saturating_sub(panel_height + history_height + network_height);
-    let apps_area = Rect::new(area.x, apps_y, area.width, apps_height);
-
     render_cpu(
         f,
         cpu_area,
@@ -323,18 +312,13 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &App) {
         crate::ui::DisplayMode::Standard,
         app.cpu_history.get(),
     );
-    render_gpu(
-        f,
-        gpu_area,
-        &app.data.gpu,
-        crate::ui::DisplayMode::Standard,
-        app.gpu_history.get(),
-    );
+    if app.show_gpu {
+        render_gpu(f, gpu_area, &app.data.gpu);
+    }
     render_memory(f, mem_area, &app.data.memory, app.show_swap);
     render_cpu_history(f, history_area, app.cpu_history.get());
     render_network(f, net_area, &app.data.network);
     render_disk(f, disk_area, &app.data.disks);
-    render_apps(f, apps_area, &app.data.processes);
 }
 
 fn render_cpu_history(f: &mut Frame, area: Rect, history: &[f32]) {

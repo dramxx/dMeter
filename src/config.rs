@@ -12,28 +12,19 @@ pub struct CliArgs {
 
     #[arg(short, long, default_value_t = false, help = "Skip GPU panel")]
     pub no_gpu: bool,
-
-    #[arg(short, long, default_value_t = String::from("C"), help = "Temperature unit: C or F")]
-    pub temp_unit: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub interval: u64,
-    pub temp_unit: String,
-    pub theme: String,
     pub show_swap: bool,
-    pub show_per_core: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             interval: 2,
-            temp_unit: "C".to_string(),
-            theme: "default".to_string(),
             show_swap: true,
-            show_per_core: false,
         }
     }
 }
@@ -64,8 +55,5 @@ impl Config {
 
     pub fn merge_cli(&mut self, cli: &CliArgs) {
         self.interval = cli.interval;
-        if !cli.temp_unit.is_empty() {
-            self.temp_unit = cli.temp_unit.clone();
-        }
     }
 }

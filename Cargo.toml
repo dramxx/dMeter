@@ -7,7 +7,6 @@ edition = "2021"
 ratatui = "0.28"
 crossterm = "0.28"
 sysinfo = "0.32"
-tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 toml = "0.8"
 dirs = "5"
 clap = { version = "4", features = ["derive"] }

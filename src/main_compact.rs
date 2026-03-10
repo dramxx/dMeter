@@ -11,35 +11,35 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &App) {
     let main_area = Rect::new(
         area.x,
         main_y,
-        area.x.saturating_add(width),
-        main_y.saturating_add(main_height),
+        width,
+        main_height,
     );
 
-    if main_area.width < 10 || main_area.height < 4 {
+    if main_area.width < 10 || main_area.height < 7 {
         return;
     }
 
-    let panel_height = 4u16;
+    let panel_height = 7u16;
     let mid_x = area.x.saturating_add(width / 3);
     let mid_x2 = area.x.saturating_add((width * 2) / 3);
 
     let cpu_area = Rect::new(
         area.x,
         main_area.y,
-        mid_x,
-        main_area.y.saturating_add(panel_height),
+        mid_x.saturating_sub(area.x),
+        panel_height,
     );
     let gpu_area = Rect::new(
         mid_x,
         main_area.y,
-        mid_x2,
-        main_area.y.saturating_add(panel_height),
+        mid_x2.saturating_sub(mid_x),
+        panel_height,
     );
     let mem_area = Rect::new(
         mid_x2,
         main_area.y,
-        area.x.saturating_add(width),
-        main_area.y.saturating_add(panel_height),
+        area.x.saturating_add(width).saturating_sub(mid_x2),
+        panel_height,
     );
 
     render_cpu(
@@ -49,37 +49,6 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &App) {
         crate::ui::DisplayMode::Compact,
         app.cpu_history.get(),
     );
-    render_gpu(
-        f,
-        gpu_area,
-        &app.data.gpu,
-        crate::ui::DisplayMode::Compact,
-        app.gpu_history.get(),
-    );
-    render_memory(f, mem_area, &app.data.memory, app.show_swap);
-
-    let network_disk_y = main_area.y.saturating_add(panel_height).saturating_add(1);
-    let panel_height2 = main_area
-        .y
-        .saturating_add(main_height)
-        .saturating_sub(network_disk_y)
-        .saturating_sub(1);
-
-    if panel_height2 > 0 {
-        let net_area = Rect::new(
-            area.x,
-            network_disk_y,
-            mid_x,
-            network_disk_y.saturating_add(panel_height2),
-        );
-        let disk_area = Rect::new(
-            mid_x,
-            network_disk_y,
-            area.x.saturating_add(width),
-            network_disk_y.saturating_add(panel_height2),
-        );
-
-        render_network(f, net_area, &app.data.network);
-        render_disk(f, disk_area, &app.data.disks);
-    }
+    render_gpu(f, gpu_area, &app.data.gpu);
+}
 }

@@ -73,12 +73,7 @@ pub fn render_disk(f: &mut Frame, area: Rect, disks: &[DiskData]) {
                 padded_label, bar, used, total
             )))
             .style(Style::default().fg(color)),
-            Rect::new(
-                inner.x,
-                y,
-                inner.x.saturating_add(inner.width),
-                y.saturating_add(1),
-            ),
+            Rect::new(inner.x, y, inner.width, 1),
         );
 
         y = y.saturating_add(1);

@@ -12,7 +12,7 @@ pub fn render_header(f: &mut Frame, area: Rect, data: &SystemData) {
     let block = Block::default()
         .style(Style::default().fg(ratatui::style::Color::Cyan))
         .borders(Borders::BOTTOM)
-        .border_style(Style::default().fg(ratatui::style::Color::DarkGray));
+        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
 
     f.render_widget(block, area);
 
@@ -57,9 +57,9 @@ pub fn render_header(f: &mut Frame, area: Rect, data: &SystemData) {
 
 pub fn render_system_info(f: &mut Frame, area: Rect, data: &SystemData) {
     let block = Block::default()
-        .style(Style::default().fg(ratatui::style::Color::DarkGray))
+        .style(Style::default().fg(crate::ui::colors::Colors::system_info()))
         .borders(Borders::TOP)
-        .border_style(Style::default().fg(ratatui::style::Color::DarkGray));
+        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
 
     f.render_widget(block, area);
 
@@ -96,7 +96,7 @@ pub fn render_minimum_size_warning(f: &mut Frame, area: Rect) {
     let block = Block::default()
         .title(" Warning ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(ratatui::style::Color::Yellow));
+        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
 
     let paragraph = Paragraph::new(Span::raw(text))
         .block(block)

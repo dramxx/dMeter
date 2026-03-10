@@ -347,7 +347,7 @@ fn render_cpu_history(f: &mut Frame, area: Rect, history: &[f32]) {
     let block = Block::default()
         .title(" CPU History ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray));
+        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
 
     f.render_widget(block, area);
 

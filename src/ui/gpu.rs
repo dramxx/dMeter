@@ -33,7 +33,7 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData, mode: DisplayMode, 
     let block = Block::default()
         .title(" GPU ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(ratatui::style::Color::DarkGray));
+        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
 
     f.render_widget(block, area);
 
@@ -49,7 +49,7 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData, mode: DisplayMode, 
     if !data.available {
         f.render_widget(
             Paragraph::new(Span::raw(data.name.clone()))
-                .style(Style::default().fg(ratatui::style::Color::DarkGray)),
+                .style(Style::default().fg(crate::ui::colors::Colors::muted_text())),
             Rect::new(
                 inner.x,
                 y,
@@ -76,7 +76,7 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData, mode: DisplayMode, 
     y = y.saturating_add(1);
 
     f.render_widget(
-        Paragraph::new(Span::raw(format!("GPU [{}] {:.1}%", gpu_bar, data.usage)))
+        Paragraph::new(Span::raw(format!("GPU  [{}] {:.1}%", gpu_bar, data.usage)))
             .style(Style::default().fg(gpu_color)),
         Rect::new(
             inner.x,

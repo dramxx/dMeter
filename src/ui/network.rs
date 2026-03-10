@@ -16,7 +16,7 @@ pub fn render_network(f: &mut Frame, area: Rect, data: &NetworkData) {
     let block = Block::default()
         .title(" NETWORK ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(ratatui::style::Color::DarkGray));
+        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
 
     f.render_widget(block, area);
 
@@ -74,13 +74,14 @@ pub fn render_network(f: &mut Frame, area: Rect, data: &NetworkData) {
 
     let total_sent = format_bytes(data.total_sent);
     let total_received = format_bytes(data.total_received);
+    let total_combined = format_bytes(data.total_sent.saturating_add(data.total_received));
 
     f.render_widget(
         Paragraph::new(Span::raw(format!(
-            "Total ↑ {}  ↓ {}",
-            total_sent, total_received
+            "Total ↑ {}  ↓ {}  ∑ {}",
+            total_sent, total_received, total_combined
         )))
-        .style(Style::default().fg(ratatui::style::Color::DarkGray)),
+        .style(Style::default().fg(crate::ui::colors::Colors::secondary_text())),
         Rect::new(
             inner.x,
             y,

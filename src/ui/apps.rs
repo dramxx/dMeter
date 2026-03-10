@@ -15,7 +15,7 @@ pub fn render_apps(f: &mut Frame, area: Rect, processes: &[ProcessData]) {
     let block = Block::default()
         .title(" Apps ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(ratatui::style::Color::DarkGray));
+        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
 
     f.render_widget(block, area);
 
@@ -27,7 +27,7 @@ pub fn render_apps(f: &mut Frame, area: Rect, processes: &[ProcessData]) {
     if processes.is_empty() {
         f.render_widget(
             Paragraph::new(Span::raw("No user applications running"))
-                .style(Style::default().fg(ratatui::style::Color::DarkGray)),
+                .style(Style::default().fg(crate::ui::colors::Colors::muted_text())),
             Rect::new(
                 inner.x,
                 inner.y,

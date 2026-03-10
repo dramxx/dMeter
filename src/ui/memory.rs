@@ -16,7 +16,7 @@ pub fn render_memory(f: &mut Frame, area: Rect, data: &MemoryData, show_swap: bo
     let block = Block::default()
         .title(" MEMORY ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(ratatui::style::Color::DarkGray));
+        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
 
     f.render_widget(block, area);
 
@@ -42,7 +42,7 @@ pub fn render_memory(f: &mut Frame, area: Rect, data: &MemoryData, show_swap: bo
 
     f.render_widget(
         Paragraph::new(Span::raw(format!(
-            "RAM [{}] {} / {}",
+            "RAM  [{}] {} / {}",
             mem_bar, mem_used, mem_total
         )))
         .style(Style::default().fg(mem_color)),

@@ -16,7 +16,7 @@ pub fn render_disk(f: &mut Frame, area: Rect, disks: &[DiskData]) {
     let block = Block::default()
         .title(" DISK ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(ratatui::style::Color::DarkGray));
+        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
 
     f.render_widget(block, area);
 

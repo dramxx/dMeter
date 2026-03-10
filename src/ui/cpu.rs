@@ -19,7 +19,7 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, mode: DisplayMode, 
     let block = Block::default()
         .title(" CPU ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(ratatui::style::Color::DarkGray));
+        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
 
     f.render_widget(block, area);
 
@@ -84,7 +84,7 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, mode: DisplayMode, 
 
     f.render_widget(
         Paragraph::new(Span::raw(cores))
-            .style(Style::default().fg(ratatui::style::Color::DarkGray)),
+            .style(Style::default().fg(crate::ui::colors::Colors::muted_text())),
         Rect::new(
             inner.x,
             y,

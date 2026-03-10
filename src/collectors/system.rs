@@ -1,6 +1,7 @@
 use crate::state::{
     CpuData, DiskData, MemoryData, NetworkData, ProcessData, SystemData, SystemInfoData,
 };
+use std::collections::HashMap;
 use std::sync::Mutex;
 use sysinfo::{Disks, Networks, System};
 
@@ -190,77 +191,112 @@ impl SystemCollector {
     fn collect_processes(&self) -> Vec<ProcessData> {
         let sys = self.sys.lock().unwrap();
 
-        // Get our own process name to filter out
         let our_pid = std::process::id();
 
-        let mut processes: Vec<ProcessData> = sys
-            .processes()
-            .iter()
-            .filter_map(|(pid, process)| {
-                let pid_u32 = pid.as_u32();
+        let mut process_map: HashMap<String, (f32, u64)> = HashMap::new();
 
-                let name = process.name().to_string_lossy().to_string();
-                let name_lower = name.to_lowercase();
+        for (pid, process) in sys.processes().iter() {
+            let pid_u32 = pid.as_u32();
 
-                // Skip our own process and this tool
-                if pid_u32 == our_pid
-                    || name_lower.contains("opencode")
-                    || name_lower.contains("dmeter")
-                {
-                    return None;
-                }
+            let name = process.name().to_string_lossy().to_string();
+            let name_lower = name.to_lowercase();
 
-                // Skip system processes and services
-                if name_lower.contains("system")
-                    || name_lower.contains("registry")
-                    || name_lower.contains("smss")
-                    || name_lower.contains("csrss")
-                    || name_lower.contains("wininit")
-                    || name_lower.contains("services")
-                    || name_lower.contains("lsass")
-                    || name_lower.contains("svchost")
-                    || name_lower.contains("dwm")
-                    || name_lower.contains("winlogon")
-                    || name_lower.contains("fontdrvhost")
-                    || name_lower.contains("sihost")
-                    || name_lower.contains("taskhostw")
-                    || name_lower.contains("runtimebroker")
-                    || name_lower.contains("searchindexer")
-                    || name_lower.contains("securityhealth")
-                    || name_lower.contains("msmpeng")
-                    || name_lower.contains("nissrv")
-                    || name_lower.contains("spoolsv")
-                    || name_lower.contains("馨")
-                    || name_lower.contains("conhost")
-                    || name_lower.contains("ctfmon")
-                    || name_lower.contains("dllhost")
-                    || name_lower.contains("explorer")
-                {
-                    return None;
-                }
+            if pid_u32 == our_pid
+                || name_lower.contains("opencode")
+                || name_lower.contains("dmeter")
+            {
+                continue;
+            }
 
-                // Get CPU usage and memory
-                let cpu_usage = process.cpu_usage();
+            if name_lower.contains("nvgwls")
+                || name_lower.contains("nvcontainer")
+                || name_lower.contains("nvdisplay")
+                || name_lower.contains("nvidia")
+                || name_lower.contains("textinputhost")
+                || name_lower.contains("phoneexperiencehost")
+                || name_lower.contains("startmenuexperience")
+                || name_lower.contains("searchhost")
+                || name_lower.contains("widgetboard")
+                || name_lower.contains("lockapp")
+                || name_lower.contains("shellhost")
+                || name_lower.contains("applicationframehost")
+                || name_lower.contains("crossdevice")
+                || name_lower.contains("vctip")
+                || name_lower.contains("microsoftstartfeed")
+                || name_lower.contains("msedgewebview2")
+                || name_lower.contains("webview2")
+                || name_lower.contains("systemsettings")
+                || name_lower.contains("_runtime")
+                || name_lower.contains("gamebar")
+                || name_lower.contains("pca")
+                || name_lower.contains("securityhealth")
+                || name_lower.contains("widgetservice")
+                || name_lower.contains("sihost")
+                || name_lower.contains("ctfmon")
+                || name_lower.contains("dllhost")
+                || name_lower.contains("conhost")
+                || name_lower.contains("runtimebroker")
+                || name_lower.contains("shellexperience")
+                || name_lower.contains("desktopimgui")
+                || name_lower.contains("system")
+                || name_lower.contains("registry")
+                || name_lower.contains("smss")
+                || name_lower.contains("csrss")
+                || name_lower.contains("wininit")
+                || name_lower.contains("services")
+                || name_lower.contains("lsass")
+                || name_lower.contains("svchost")
+                || name_lower.contains("dwm")
+                || name_lower.contains("winlogon")
+                || name_lower.contains("fontdrvhost")
+                || name_lower.contains("馨")
+                || name_lower.contains("mpmusic")
+                || name_lower.contains("muse")
+                || name_lower.contains("searchindexer")
+                || name_lower.contains("searchui")
+                || name_lower.contains("mus")
+                || name_lower.contains("msob")
+                || name_lower.contains("wmi")
+                || name_lower.contains("mpdefender")
+                || name_lower.contains("msmpeng")
+                || name_lower.contains("mosuso")
+                || name_lower.contains("update")
+                || name_lower.contains("atiecl")
+                || name_lower.contains("taskhostw")
+                || name_lower.contains("memory compression")
+                || name_lower.contains("oobe")
+                || name_lower.contains("userlistbroker")
+                || name_lower.contains("user oobe")
+                || name_lower.contains("bash")
+                || name_lower.contains("explorer")
+            {
+                continue;
+            }
 
-                // sysinfo returns memory in bytes, convert to MB
-                let memory_mb = process.memory() / (1024 * 1024);
+            let cpu_usage = process.cpu_usage();
+            let memory_mb = process.memory() / (1024 * 1024);
 
-                // Skip processes using almost no resources (truly idle)
-                if cpu_usage < 0.1 && memory_mb < 5 {
-                    return None;
-                }
+            // Only show processes using some memory (likely user apps)
+            if memory_mb < 10 {
+                continue;
+            }
 
-                Some(ProcessData {
-                    name,
-                    cpu_usage,
-                    memory_mb,
-                })
+            let entry = process_map.entry(name).or_insert((0.0, 0));
+            entry.0 = entry.0.max(cpu_usage);
+            entry.1 += memory_mb;
+        }
+
+        let mut processes: Vec<ProcessData> = process_map
+            .into_iter()
+            .map(|(name, (cpu_usage, memory_mb))| ProcessData {
+                name,
+                cpu_usage,
+                memory_mb,
             })
             .collect();
 
-        // Sort by memory usage descending to show most active apps
         processes.sort_by(|a, b| b.memory_mb.cmp(&a.memory_mb));
-        processes.truncate(50);
+        processes.truncate(30);
 
         processes
     }

@@ -20,7 +20,7 @@ pub fn render_header(f: &mut Frame, area: Rect, data: &SystemData) {
         return;
     }
 
-    let left = "dmeter";
+    let left = "dMeter";
     f.render_widget(
         Paragraph::new(Span::raw(left).bold())
             .style(Style::default().fg(ratatui::style::Color::Cyan)),

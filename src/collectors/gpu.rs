@@ -1,0 +1,75 @@
+use crate::state::GpuData;
+
+pub fn collect_gpu_data() -> GpuData {
+    #[cfg(windows)]
+    {
+        match try_nvidia() {
+            Ok(gpu) => return gpu,
+            Err(e) => {
+                log::warn!("GPU detection failed: {}", e);
+            }
+        }
+    }
+
+    GpuData {
+        available: false,
+        name: "No GPU / Not detected".to_string(),
+        usage: 0.0,
+        memory_used: 0,
+        memory_total: 0,
+        temperature: None,
+        fan_speed: None,
+        power_draw: None,
+    }
+}
+
+#[cfg(windows)]
+fn try_nvidia() -> Result<GpuData, String> {
+    use nvml_wrapper::Nvml;
+
+    let nvml = Nvml::init().map_err(|e| format!("NVML init failed: {}", e))?;
+    let device = nvml
+        .device_by_index(0)
+        .map_err(|e| format!("No GPU found: {}", e))?;
+
+    let name = device
+        .name()
+        .map_err(|e| format!("Failed to get GPU name: {}", e))?
+        .to_string();
+    let usage = device
+        .utilization_rates()
+        .map_err(|e| format!("Failed to get utilization: {}", e))?
+        .gpu as f32;
+
+    let (memory_used, memory_total) = {
+        let mem = device
+            .memory_info()
+            .map_err(|e| format!("Failed to get memory info: {}", e))?;
+        (mem.used, mem.total)
+    };
+
+    let temperature = device
+        .temperature(nvml_wrapper::enum_wrappers::device::TemperatureSensor::Gpu)
+        .ok()
+        .map(|t| t as f32);
+
+    let fan_speed = device.fan_speed(0).ok().map(|s| s as u32);
+
+    let power_draw = device.power_usage().ok().map(|p| p / 1000);
+
+    Ok(GpuData {
+        available: true,
+        name,
+        usage,
+        memory_used,
+        memory_total,
+        temperature,
+        fan_speed,
+        power_draw,
+    })
+}
+
+#[cfg(not(windows))]
+fn try_nvidia() -> Result<GpuData, String> {
+    Err("Not on Windows".to_string())
+}

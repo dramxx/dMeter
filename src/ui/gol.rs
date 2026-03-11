@@ -1,10 +1,14 @@
 use std::collections::HashSet;
 
+use std::time::Instant;
+
 pub struct GameOfLife {
     pub cells: HashSet<(u32, u32)>,
     pub width: u32,
     pub height: u32,
     pub generation: u32,
+    is_dead: bool,
+    death_time: Option<Instant>,
 }
 
 impl GameOfLife {
@@ -14,6 +18,8 @@ impl GameOfLife {
             width,
             height,
             generation: 0,
+            is_dead: false,
+            death_time: None,
         };
         gol.randomize();
         gol
@@ -29,9 +35,21 @@ impl GameOfLife {
             }
         }
         self.generation = 0;
+        self.is_dead = false;
+        self.death_time = None;
     }
 
     pub fn step(&mut self) {
+        // Check if we're in death state and need to revive
+        if self.is_dead {
+            if let Some(death_time) = self.death_time {
+                if death_time.elapsed().as_secs() >= 10 {
+                    self.randomize(); // Revive after 10 seconds
+                }
+            }
+            return; // Don't process game logic while dead
+        }
+
         let mut new_cells = HashSet::new();
 
         for y in 0..self.height {
@@ -47,6 +65,12 @@ impl GameOfLife {
 
         self.cells = new_cells;
         self.generation += 1;
+
+        // Check if all cells died
+        if self.cells.is_empty() {
+            self.is_dead = true;
+            self.death_time = Some(Instant::now());
+        }
     }
 
     fn count_neighbors(&self, x: u32, y: u32) -> u32 {
@@ -73,6 +97,10 @@ impl GameOfLife {
 
     pub fn generation(&self) -> u32 {
         self.generation
+    }
+
+    pub fn is_dead(&self) -> bool {
+        self.is_dead
     }
 }
 

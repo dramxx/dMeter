@@ -25,7 +25,7 @@ pub fn render_disk(f: &mut Frame, area: Rect, disks: &[DiskData]) {
         return;
     }
 
-    let bar_width = ((inner.width / 3) as usize).max(8);
+    let bar_width = (((inner.width / 3) as f32 * 2.0) as usize).max(8);
 
     let disks: Vec<_> = disks.iter().take(3).collect();
     let max_label_width = disks

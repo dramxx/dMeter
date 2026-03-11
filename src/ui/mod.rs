@@ -1,6 +1,7 @@
 pub mod colors;
 pub mod cpu;
 pub mod disk;
+pub mod disk_io;
 pub mod gol;
 pub mod gpu;
 pub mod header;
@@ -10,6 +11,7 @@ pub mod network;
 
 pub use cpu::*;
 pub use disk::*;
+pub use disk_io::*;
 pub use gol::*;
 pub use gpu::*;
 pub use header::*;

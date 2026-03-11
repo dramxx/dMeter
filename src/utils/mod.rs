@@ -78,10 +78,9 @@ pub fn render_sparkline(data: &[f32], width: usize) -> String {
         return "░".repeat(width);
     }
 
-    let min = data.iter().cloned().fold(f32::INFINITY, f32::min);
-    let max = data.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    let range = max - min;
-
+    // Use fixed scale from 0 to max to prevent visual jumps during buffer fill
+    let max = data.iter().cloned().fold(0.0f32, f32::max).max(1.0); // Minimum max of 1.0
+    
     let chars = ['░', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
     let step = if data.len() > width {
@@ -96,11 +95,8 @@ pub fn render_sparkline(data: &[f32], width: usize) -> String {
         let idx = (i * step).min(data.len() - 1);
         let value = data[idx];
 
-        let normalized = if range > 0.0 {
-            (value - min) / range
-        } else {
-            0.5
-        };
+        // Normalize from 0 to max (fixed scale)
+        let normalized = (value / max).clamp(0.0, 1.0);
 
         let char_idx = ((normalized * (chars.len() - 1) as f32) as usize).min(chars.len() - 1);
         result.push(chars[char_idx]);

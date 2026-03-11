@@ -9,6 +9,8 @@ pub struct CpuData {
     pub frequency: u64,
     pub physical_cores: usize,
     pub logical_cores: usize,
+    pub fan_speed: Option<u32>,
+    pub power_draw: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -29,6 +31,9 @@ pub struct MemoryData {
     pub used: u64,
     pub swap_total: u64,
     pub swap_used: u64,
+    pub commit_total: u64,
+    pub commit_used: u64,
+    pub cached: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -49,6 +54,12 @@ pub struct DiskData {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DiskIOData {
+    pub read_speed: u64,
+    pub write_speed: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SystemInfoData {
     pub os_name: String,
     pub os_version: String,
@@ -64,6 +75,7 @@ pub struct SystemData {
     pub memory: MemoryData,
     pub network: NetworkData,
     pub disks: Vec<DiskData>,
+    pub disk_io: DiskIOData,
     pub system: SystemInfoData,
 }
 

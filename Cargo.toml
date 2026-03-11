@@ -2,6 +2,13 @@
 name = "dmeter"
 version = "0.1.0"
 edition = "2021"
+authors = ["dMeter Contributors"]
+description = "A fast, beautiful terminal system monitor built with Rust"
+license = "MIT"
+repository = "https://github.com/yourusername/dmeter"
+keywords = ["system-monitor", "tui", "performance", "monitoring"]
+categories = ["command-line-utilities"]
+readme = "README.md"
 
 [dependencies]
 ratatui = "0.28"

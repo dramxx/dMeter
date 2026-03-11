@@ -1,5 +1,5 @@
 use crate::state::NetworkData;
-use crate::utils::format_bytes_per_sec;
+use crate::utils::{format_bytes_per_sec, render_sparkline};
 use ratatui::{
     layout::Rect,
     style::Style,
@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-pub fn render_network(f: &mut Frame, area: Rect, data: &NetworkData) {
+pub fn render_network(f: &mut Frame, area: Rect, data: &NetworkData, rx_history: &[f32], tx_history: &[f32]) {
     if area.width < 4 || area.height < 2 {
         return;
     }
@@ -27,6 +27,39 @@ pub fn render_network(f: &mut Frame, area: Rect, data: &NetworkData) {
 
     let mut y = inner.y;
 
+    let up_speed = format_bytes_per_sec(data.upload_speed);
+    let down_speed = format_bytes_per_sec(data.download_speed);
+
+    // Calculate responsive sparkline width
+    let text_content = format!("  ↑ {} | ↓ {}", up_speed, down_speed);
+    let text_width = text_content.len() as u16 + 2;
+    let sparkline_width = (inner.width.saturating_sub(text_width) as usize).max(20);
+
+    // Render sparkline on the left
+    if !rx_history.is_empty() && !tx_history.is_empty() {
+        let combined_sparkline = render_sparkline(rx_history, sparkline_width);
+        f.render_widget(
+            Paragraph::new(Span::raw(combined_sparkline))
+                .style(Style::default().fg(ratatui::style::Color::Green)),
+            Rect::new(inner.x, y, sparkline_width as u16, 1),
+        );
+    }
+
+    // Render network text on the right (after sparkline)
+    use ratatui::text::Line;
+    let network_text = Line::from(vec![
+        Span::styled("  ↑ ", Style::default().fg(ratatui::style::Color::White)),
+        Span::styled(up_speed, Style::default().fg(ratatui::style::Color::Green)),
+        Span::styled(" | ↓ ", Style::default().fg(ratatui::style::Color::White)),
+        Span::styled(down_speed, Style::default().fg(ratatui::style::Color::Cyan)),
+    ]);
+    f.render_widget(
+        Paragraph::new(network_text),
+        Rect::new(inner.x + sparkline_width as u16, y, inner.width.saturating_sub(sparkline_width as u16), 1),
+    );
+    y = y.saturating_add(1);
+
+    // Render adapter info below
     let adapter_info = if data.adapter_name.is_empty() {
         "No adapter".to_string()
     } else {
@@ -36,23 +69,6 @@ pub fn render_network(f: &mut Frame, area: Rect, data: &NetworkData) {
     f.render_widget(
         Paragraph::new(Span::raw(adapter_info))
             .style(Style::default().fg(ratatui::style::Color::White)),
-        Rect::new(inner.x, y, inner.width, 1),
-    );
-    y = y.saturating_add(1);
-
-    let up_speed = format_bytes_per_sec(data.upload_speed);
-    let down_speed = format_bytes_per_sec(data.download_speed);
-
-    f.render_widget(
-        Paragraph::new(Span::raw(format!("↑ {}", up_speed)))
-            .style(Style::default().fg(ratatui::style::Color::Green)),
-        Rect::new(inner.x, y, inner.width, 1),
-    );
-    y = y.saturating_add(1);
-
-    f.render_widget(
-        Paragraph::new(Span::raw(format!("↓ {}", down_speed)))
-            .style(Style::default().fg(ratatui::style::Color::Red)),
         Rect::new(inner.x, y, inner.width, 1),
     );
 }

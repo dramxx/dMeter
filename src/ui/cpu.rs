@@ -1,7 +1,7 @@
 use crate::state::CpuData;
 use crate::ui::layout::DisplayMode;
 use crate::utils::{
-    format_frequency, get_temp_color, get_usage_color, render_bar, render_sparkline,
+    format_frequency, get_usage_color, render_bar,
 };
 use ratatui::{
     layout::Rect,
@@ -11,7 +11,7 @@ use ratatui::{
     Frame,
 };
 
-pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, mode: DisplayMode, history: &[f32]) {
+pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, _mode: DisplayMode, _history: &[f32]) {
     if area.width < 4 || area.height < 2 {
         return;
     }
@@ -32,14 +32,8 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, mode: DisplayMode, 
     let bar = render_bar(data.usage, bar_width);
     let color = get_usage_color(data.usage);
 
-    let cpu_name = &data.name;
+    let cpu_name = data.name.trim();
     let freq = format_frequency(data.frequency);
-    let cores = format!(
-        "{} cores ({}P/{}L)",
-        data.core_usage.len(),
-        data.physical_cores,
-        data.logical_cores
-    );
 
     let mut y = inner.y;
 
@@ -57,29 +51,30 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, mode: DisplayMode, 
     );
     y = y.saturating_add(1);
 
-    if let Some(temp) = data.temperature {
-        let temp_color = get_temp_color(temp);
-        f.render_widget(
-            Paragraph::new(Span::raw(format!("Temperature: {:.0}°C", temp)))
-                .style(Style::default().fg(temp_color)),
-            Rect::new(inner.x, y, inner.width, 1),
-        );
-        y = y.saturating_add(1);
-    }
-
-    f.render_widget(
-        Paragraph::new(Span::raw(cores))
-            .style(Style::default().fg(crate::ui::colors::Colors::muted_text())),
-        Rect::new(inner.x, y, inner.width, 1),
-    );
+    // Add empty row for spacing
     y = y.saturating_add(1);
 
-    if (mode == DisplayMode::Standard || mode == DisplayMode::Spacious) && !history.is_empty() {
-        let sparkline = render_sparkline(history, bar_width);
+    // Display temperature widget with fan speed and power
+    let mut temp_parts = Vec::new();
+    
+    if let Some(temp) = data.temperature {
+        temp_parts.push(format!("Temp: {:.0}°C", temp));
+    }
+    
+    if let Some(fan) = data.fan_speed {
+        temp_parts.push(format!("Fan: {}%", fan));
+    }
+    
+    if let Some(power) = data.power_draw {
+        temp_parts.push(format!("Power: {}W", power));
+    }
+    
+    if !temp_parts.is_empty() {
+        let temp_text = temp_parts.join("  ");
         f.render_widget(
-            Paragraph::new(Span::raw(sparkline))
-                .style(Style::default().fg(ratatui::style::Color::Blue)),
-            Rect::new(inner.x, y, bar_width as u16, 1),
+            Paragraph::new(Span::raw(temp_text))
+                .style(Style::default().fg(ratatui::style::Color::Yellow)),
+            Rect::new(inner.x, y, inner.width, 1),
         );
     }
 }

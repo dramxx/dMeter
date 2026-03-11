@@ -25,8 +25,6 @@ pub fn render_disk(f: &mut Frame, area: Rect, disks: &[DiskData]) {
         return;
     }
 
-    let bar_width = (((inner.width / 3) as f32 * 2.0) as usize).max(8);
-
     let disks: Vec<_> = disks.iter().take(3).collect();
     let max_label_width = disks
         .iter()
@@ -53,9 +51,6 @@ pub fn render_disk(f: &mut Frame, area: Rect, disks: &[DiskData]) {
             0.0
         };
 
-        let bar = render_bar(percent, bar_width);
-        let color = get_usage_color(percent);
-
         let used = format_bytes(disk.used);
         let total = format_bytes(disk.total);
 
@@ -66,6 +61,14 @@ pub fn render_disk(f: &mut Frame, area: Rect, disks: &[DiskData]) {
         };
 
         let padded_label = format!("{:<width$}", label, width = max_label_width);
+        
+        // Calculate bar width dynamically based on actual content
+        let size_text = format!(" {} / {}", used, total);
+        let text_width = padded_label.len() + size_text.len() + 4; // +4 for " [] "
+        let bar_width = (inner.width as usize).saturating_sub(text_width).max(10);
+        
+        let bar = render_bar(percent, bar_width);
+        let color = get_usage_color(percent);
 
         f.render_widget(
             Paragraph::new(Span::raw(format!(

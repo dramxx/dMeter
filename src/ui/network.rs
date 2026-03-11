@@ -8,7 +8,13 @@ use ratatui::{
     Frame,
 };
 
-pub fn render_network(f: &mut Frame, area: Rect, data: &NetworkData, rx_history: &[f32], tx_history: &[f32]) {
+pub fn render_network(
+    f: &mut Frame,
+    area: Rect,
+    data: &NetworkData,
+    rx_history: &[f32],
+    tx_history: &[f32],
+) {
     if area.width < 4 || area.height < 2 {
         return;
     }
@@ -55,7 +61,12 @@ pub fn render_network(f: &mut Frame, area: Rect, data: &NetworkData, rx_history:
     ]);
     f.render_widget(
         Paragraph::new(network_text),
-        Rect::new(inner.x + sparkline_width as u16, y, inner.width.saturating_sub(sparkline_width as u16), 1),
+        Rect::new(
+            inner.x + sparkline_width as u16,
+            y,
+            inner.width.saturating_sub(sparkline_width as u16),
+            1,
+        ),
     );
     y = y.saturating_add(1);
 

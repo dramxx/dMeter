@@ -1,11 +1,10 @@
 #[cfg(windows)]
 pub fn get_windows_memory_info() -> Option<(u64, u64, u64)> {
-    
     // Try WMIC first (fast), fallback to PowerShell (slower but more reliable)
     if let Some(result) = try_wmic_memory() {
         return Some(result);
     }
-    
+
     // Fallback to PowerShell if WMIC fails
     try_powershell_memory()
 }
@@ -13,23 +12,26 @@ pub fn get_windows_memory_info() -> Option<(u64, u64, u64)> {
 #[cfg(windows)]
 fn try_wmic_memory() -> Option<(u64, u64, u64)> {
     use std::process::Command;
-    
+
     if let Ok(output) = Command::new("cmd")
         .args([
-            "/C", 
-            "wmic OS get TotalVirtualMemorySize,FreeVirtualMemory /format:csv"
+            "/C",
+            "wmic OS get TotalVirtualMemorySize,FreeVirtualMemory /format:csv",
         ])
-        .output() 
+        .output()
     {
         if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
-            
+
             // Parse WMIC CSV output
             for line in output_str.lines() {
                 if line.contains("TotalVirtualMemorySize") && !line.trim().is_empty() {
                     let parts: Vec<&str> = line.split(',').collect();
                     if parts.len() >= 3 {
-                        if let (Ok(total_kb), Ok(free_kb)) = (parts[1].trim().parse::<u64>(), parts[2].trim().parse::<u64>()) {
+                        if let (Ok(total_kb), Ok(free_kb)) = (
+                            parts[1].trim().parse::<u64>(),
+                            parts[2].trim().parse::<u64>(),
+                        ) {
                             let commit_total = total_kb * 1024; // Convert KB to bytes
                             let commit_used = (total_kb - free_kb) * 1024;
                             let cached = commit_total / 10; // Rough estimate: 10% of total
@@ -40,24 +42,23 @@ fn try_wmic_memory() -> Option<(u64, u64, u64)> {
             }
         }
     }
-    
+
     None
 }
 
 #[cfg(windows)]
 fn try_powershell_memory() -> Option<(u64, u64, u64)> {
     use std::process::Command;
-    
+
     if let Ok(output) = Command::new("powershell")
         .args([
             "-Command",
             "Get-WmiObject -Class Win32_OperatingSystem | Select-Object TotalVirtualMemorySize, FreeVirtualMemory | ConvertTo-Csv -NoTypeInformation"
         ])
-        .output() 
+        .output()
     {
         if output.status.success() {
             let output_str = String::from_utf8_lossy(&output.stdout);
-            
             let lines: Vec<&str> = output_str.lines().collect();
             if lines.len() >= 2 {
                 let data_line = lines[1];
@@ -73,7 +74,7 @@ fn try_powershell_memory() -> Option<(u64, u64, u64)> {
             }
         }
     }
-    
+
     None
 }
 

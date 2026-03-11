@@ -82,10 +82,14 @@ impl GameOfLife {
                 }
                 let nx = x as i32 + dx;
                 let ny = y as i32 + dy;
-                if nx >= 0 && nx < self.width as i32 && ny >= 0 && ny < self.height as i32
-                    && self.cells.contains(&(nx as u32, ny as u32)) {
-                        count += 1;
-                    }
+                if nx >= 0
+                    && nx < self.width as i32
+                    && ny >= 0
+                    && ny < self.height as i32
+                    && self.cells.contains(&(nx as u32, ny as u32))
+                {
+                    count += 1;
+                }
             }
         }
         count

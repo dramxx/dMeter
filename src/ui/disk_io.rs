@@ -8,7 +8,13 @@ use ratatui::{
     Frame,
 };
 
-pub fn render_disk_io(f: &mut Frame, area: Rect, data: &DiskIOData, read_history: &[f32], write_history: &[f32]) {
+pub fn render_disk_io(
+    f: &mut Frame,
+    area: Rect,
+    data: &DiskIOData,
+    read_history: &[f32],
+    write_history: &[f32],
+) {
     if area.width < 4 || area.height < 2 {
         return;
     }
@@ -47,12 +53,23 @@ pub fn render_disk_io(f: &mut Frame, area: Rect, data: &DiskIOData, read_history
     let io_text = Line::from(vec![
         Span::styled("  Read ", Style::default().fg(ratatui::style::Color::White)),
         Span::styled(read_speed, Style::default().fg(ratatui::style::Color::Blue)),
-        Span::styled(" | Write ", Style::default().fg(ratatui::style::Color::White)),
-        Span::styled(write_speed, Style::default().fg(ratatui::style::Color::Yellow)),
+        Span::styled(
+            " | Write ",
+            Style::default().fg(ratatui::style::Color::White),
+        ),
+        Span::styled(
+            write_speed,
+            Style::default().fg(ratatui::style::Color::Yellow),
+        ),
     ]);
 
     f.render_widget(
         Paragraph::new(io_text),
-        Rect::new(inner.x + sparkline_width as u16, inner.y, inner.width.saturating_sub(sparkline_width as u16), 1),
+        Rect::new(
+            inner.x + sparkline_width as u16,
+            inner.y,
+            inner.width.saturating_sub(sparkline_width as u16),
+            1,
+        ),
     );
 }

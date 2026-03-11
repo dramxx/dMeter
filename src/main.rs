@@ -15,8 +15,8 @@ use crate::collectors::SystemCollector;
 use crate::config::CliArgs;
 use crate::state::{HistoryBuffer, SystemData};
 use crate::ui::{
-    get_display_mode, render_cpu, render_disk, render_disk_io, render_gpu, render_header, render_memory,
-    render_network, render_system_info, GameOfLife,
+    get_display_mode, render_cpu, render_disk, render_disk_io, render_gpu, render_header,
+    render_memory, render_network, render_system_info, GameOfLife,
 };
 use clap::Parser;
 
@@ -90,7 +90,7 @@ impl App {
 
         if self.show_gpu && self.data.gpu.available {
             self.gpu_history.push(self.data.gpu.usage);
-            
+
             // VRAM usage percentage
             let vram_usage = if self.data.gpu.memory_total > 0 {
                 (self.data.gpu.memory_used as f32 / self.data.gpu.memory_total as f32) * 100.0
@@ -101,12 +101,16 @@ impl App {
         }
 
         // Network history (already in bytes/s, convert to KB/s for better scaling)
-        self.network_rx_history.push(self.data.network.download_speed as f32 / 1024.0);
-        self.network_tx_history.push(self.data.network.upload_speed as f32 / 1024.0);
+        self.network_rx_history
+            .push(self.data.network.download_speed as f32 / 1024.0);
+        self.network_tx_history
+            .push(self.data.network.upload_speed as f32 / 1024.0);
 
         // Disk I/O history (already in bytes/s, convert to MB/s for better scaling)
-        self.disk_read_history.push(self.data.disk_io.read_speed as f32 / 1024.0 / 1024.0);
-        self.disk_write_history.push(self.data.disk_io.write_speed as f32 / 1024.0 / 1024.0);
+        self.disk_read_history
+            .push(self.data.disk_io.read_speed as f32 / 1024.0 / 1024.0);
+        self.disk_write_history
+            .push(self.data.disk_io.write_speed as f32 / 1024.0 / 1024.0);
     }
 }
 
@@ -235,7 +239,7 @@ fn render_ui(f: &mut Frame, app: &mut App, mode: crate::ui::DisplayMode) {
     // Add slight left padding (2 characters)
     let left_padding = 2;
     let available_width = area.width.saturating_sub(left_padding).saturating_sub(1);
-    
+
     // Header (1 row)
     let header_area = Rect::new(area.x + left_padding, area.y, available_width, 1);
     render_header(f, header_area, &app.data);
@@ -292,21 +296,31 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
     // Top row has: col1_width + col2_width + col3_width = area.width
     // Gap between CPU and GPU is 1 character (natural border spacing)
     // We want same gap size and widgets to fill remaining space
-    
+
     let gap_size = 0; // Minimal gap for tighter spacing
     let total_gap_width = gap_size;
     let available_width = area.width - total_gap_width;
     let history_widget_width = available_width / 2; // Split full width between widgets
-    
+
     // First history row: CPU and RAM side by side
     let history_y = area.y + panel_height;
     let cpu_history_area = Rect::new(area.x, history_y, history_widget_width, history_height);
-    let ram_history_area = Rect::new(area.x + history_widget_width + gap_size, history_y, history_widget_width, history_height);
+    let ram_history_area = Rect::new(
+        area.x + history_widget_width + gap_size,
+        history_y,
+        history_widget_width,
+        history_height,
+    );
 
-    // Second history row: GPU and VRAM side by side  
+    // Second history row: GPU and VRAM side by side
     let gpu_history_y = history_y + history_height;
     let gpu_history_area = Rect::new(area.x, gpu_history_y, history_widget_width, history_height);
-    let vram_history_area = Rect::new(area.x + history_widget_width + gap_size, gpu_history_y, history_widget_width, history_height);
+    let vram_history_area = Rect::new(
+        area.x + history_widget_width + gap_size,
+        gpu_history_y,
+        history_widget_width,
+        history_height,
+    );
 
     // Bottom row panels
     let network_y = gpu_history_y + history_height;
@@ -346,9 +360,21 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
         render_gpu_history(f, gpu_history_area, app.gpu_history.get());
         render_vram_history(f, vram_history_area, app.vram_history.get());
     }
-    render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
+    render_network(
+        f,
+        net_area,
+        &app.data.network,
+        app.network_rx_history.get(),
+        app.network_tx_history.get(),
+    );
     render_disk(f, disk_area, &app.data.disks);
-    render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
+    render_disk_io(
+        f,
+        disk_io_area,
+        &app.data.disk_io,
+        app.disk_read_history.get(),
+        app.disk_write_history.get(),
+    );
 }
 
 fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
@@ -376,31 +402,36 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
     // Top row has: col1_width + col2_width + col3_width = area.width
     // Gap between CPU and GPU is 1 character (natural border spacing)
     // We want same gap size and widgets to fill remaining space
-    
+
     let gap_size = 0; // Minimal gap for tighter spacing
     let total_gap_width = gap_size;
     let available_width = area.width - total_gap_width;
     let history_widget_width = available_width / 2; // Split full width between widgets
-    
+
     // First history row: CPU and RAM side by side
     let history_y = area.y + panel_height;
     let cpu_history_area = Rect::new(area.x, history_y, history_widget_width, history_height);
-    let ram_history_area = Rect::new(area.x + history_widget_width + gap_size, history_y, history_widget_width, history_height);
+    let ram_history_area = Rect::new(
+        area.x + history_widget_width + gap_size,
+        history_y,
+        history_widget_width,
+        history_height,
+    );
 
-    // Second history row: GPU and VRAM side by side  
+    // Second history row: GPU and VRAM side by side
     let gpu_history_y = history_y + history_height;
     let gpu_history_area = Rect::new(area.x, gpu_history_y, history_widget_width, history_height);
-    let vram_history_area = Rect::new(area.x + history_widget_width + gap_size, gpu_history_y, history_widget_width, history_height);
+    let vram_history_area = Rect::new(
+        area.x + history_widget_width + gap_size,
+        gpu_history_y,
+        history_widget_width,
+        history_height,
+    );
 
     // Network row
     let network_y = gpu_history_y + history_height;
     let net_area = Rect::new(area.x, network_y, col1_width, network_height);
-    let disk_area = Rect::new(
-        area.x + col1_width,
-        network_y,
-        col2_width,
-        network_height,
-    );
+    let disk_area = Rect::new(area.x + col1_width, network_y, col2_width, network_height);
     let disk_io_area = Rect::new(
         area.x + col1_width + col2_width,
         network_y,
@@ -432,9 +463,21 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
         render_gpu_history(f, gpu_history_area, app.gpu_history.get());
         render_vram_history(f, vram_history_area, app.vram_history.get());
     }
-    render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
+    render_network(
+        f,
+        net_area,
+        &app.data.network,
+        app.network_rx_history.get(),
+        app.network_tx_history.get(),
+    );
     render_disk(f, disk_area, &app.data.disks);
-    render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
+    render_disk_io(
+        f,
+        disk_io_area,
+        &app.data.disk_io,
+        app.disk_read_history.get(),
+        app.disk_write_history.get(),
+    );
 
     // Create inner container with padding (no border)
     let inner_gol_area = gol_area.inner(Margin::new(6, 3)); // 6-char padding X, 3-char padding Y
@@ -467,9 +510,10 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
             if gol.is_dead() {
                 // Show "all died." text in center
                 let text = "all died.";
-                let text_x = inner_gol_area.x + (inner_gol_area.width.saturating_sub(text.len() as u16)) / 2;
+                let text_x =
+                    inner_gol_area.x + (inner_gol_area.width.saturating_sub(text.len() as u16)) / 2;
                 let text_y = inner_gol_area.y + inner_gol_area.height / 2;
-                
+
                 f.render_widget(
                     Paragraph::new(Span::raw(text))
                         .style(Style::default().fg(ratatui::style::Color::DarkGray)),
@@ -480,7 +524,8 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
                 let max_width = inner_gol_area.width;
                 let max_height = inner_gol_area.height;
                 let center_x = inner_gol_area.x + (max_width.saturating_sub(gol.width as u16)) / 2;
-                let center_y = inner_gol_area.y + (max_height.saturating_sub(gol.height as u16)) / 2;
+                let center_y =
+                    inner_gol_area.y + (max_height.saturating_sub(gol.height as u16)) / 2;
 
                 for y in 0..gol.height {
                     for x in 0..gol.width {

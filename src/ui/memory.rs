@@ -90,8 +90,10 @@ pub fn render_memory(f: &mut Frame, area: Rect, data: &MemoryData, show_swap: bo
         let loading_index = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis() / 250) as usize % 4; // Rotate every 250ms
-        
+            .as_millis()
+            / 250) as usize
+            % 4; // Rotate every 250ms
+
         f.render_widget(
             Paragraph::new(Span::raw(format!(
                 "Loading memory info {}",

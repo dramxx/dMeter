@@ -1,8 +1,6 @@
 use crate::state::CpuData;
 use crate::ui::layout::DisplayMode;
-use crate::utils::{
-    format_frequency, get_usage_color, render_bar,
-};
+use crate::utils::{format_frequency, get_usage_color, render_bar};
 use ratatui::{
     layout::Rect,
     style::Style,
@@ -56,19 +54,19 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, _mode: DisplayMode,
 
     // Display temperature widget with fan speed and power
     let mut temp_parts = Vec::new();
-    
+
     if let Some(temp) = data.temperature {
         temp_parts.push(format!("Temp: {:.0}°C", temp));
     }
-    
+
     if let Some(fan) = data.fan_speed {
         temp_parts.push(format!("Fan: {}%", fan));
     }
-    
+
     if let Some(power) = data.power_draw {
         temp_parts.push(format!("Power: {}W", power));
     }
-    
+
     if !temp_parts.is_empty() {
         let temp_text = temp_parts.join("  ");
         f.render_widget(

@@ -80,7 +80,7 @@ pub fn render_sparkline(data: &[f32], width: usize) -> String {
 
     // Use fixed scale from 0 to max to prevent visual jumps during buffer fill
     let max = data.iter().cloned().fold(0.0f32, f32::max).max(1.0); // Minimum max of 1.0
-    
+
     let chars = ['░', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
     let step = if data.len() > width {

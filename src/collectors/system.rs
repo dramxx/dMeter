@@ -1,8 +1,8 @@
 use crate::state::{CpuData, DiskData, MemoryData, NetworkData, SystemData, SystemInfoData};
-use std::sync::Mutex;
-use sysinfo::{Disks, Networks, System};
 use std::sync::mpsc::{self, Receiver};
+use std::sync::Mutex;
 use std::thread;
+use sysinfo::{Disks, Networks, System};
 
 pub struct SystemCollector {
     sys: Mutex<System>,
@@ -66,21 +66,20 @@ impl SystemCollector {
         #[cfg(windows)]
         {
             use std::process::Command;
-            
+
             let mut total_read = 0u64;
             let mut total_write = 0u64;
-            
+
             // Use typeperf to get real-time disk I/O counters
             if let Ok(output) = Command::new("typeperf")
                 .args([
-                    "\"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec\",\"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec\"", 
+                    "\"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec\",\"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec\"",
                     "-sc", "1"
                 ])
-                .output() 
+                .output()
             {
                 if output.status.success() {
                     let output_str = String::from_utf8_lossy(&output.stdout);
-                    
                     // Parse the last line with actual data
                     if let Some(last_line) = output_str.lines().last() {
                         let parts: Vec<&str> = last_line.split(',').collect();
@@ -94,43 +93,49 @@ impl SystemCollector {
                     }
                 }
             }
-            
+
             // If typeperf fails, try a simple simulation based on system activity
             if total_read == 0 && total_write == 0 {
                 use std::time::{SystemTime, UNIX_EPOCH};
-                let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-                
+                let timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+
                 // Simulate realistic disk activity based on time
                 // This gives the appearance of activity when real counters aren't available
                 let activity_factor = (timestamp % 10) as f64 / 10.0; // 0.0 to 0.9
                 total_read = (activity_factor * 50.0 * 1024.0 * 1024.0) as u64; // 0-50 MB/s read
-                total_write = (activity_factor * 30.0 * 1024.0 * 1024.0) as u64; // 0-30 MB/s write
+                total_write = (activity_factor * 30.0 * 1024.0 * 1024.0) as u64;
+                // 0-30 MB/s write
             }
-            
+
             (total_read, total_write)
         }
-        
+
         #[cfg(not(windows))]
         {
             use std::fs;
-            
+
             let mut total_read = 0u64;
             let mut total_write = 0u64;
-            
+
             // Read from /proc/diskstats on Linux
             if let Ok(content) = fs::read_to_string("/proc/diskstats") {
                 for line in content.lines() {
                     let parts: Vec<&str> = line.split_whitespace().collect();
                     if parts.len() >= 6 {
                         // Format: major minor name read_ios read_merges read_sectors write_ios...
-                        if let (Ok(read_sectors), Ok(write_sectors)) = (parts[5].parse::<u64>(), parts[9].parse::<u64>()) {
+                        if let (Ok(read_sectors), Ok(write_sectors)) =
+                            (parts[5].parse::<u64>(), parts[9].parse::<u64>())
+                        {
                             total_read += read_sectors * 512; // Convert sectors to bytes
                             total_write += write_sectors * 512;
                         }
                     }
                 }
             }
-            
+
             (total_read, total_write)
         }
     }
@@ -214,17 +219,20 @@ impl SystemCollector {
 
     fn collect_memory(&self) -> MemoryData {
         let sys = self.sys.lock().unwrap_or_else(|e| e.into_inner());
-        
+
         // Check for new memory data from background thread (non-blocking)
-        let mut cached_info = self.cached_memory_info.lock().unwrap_or_else(|e| e.into_inner());
-        
+        let mut cached_info = self
+            .cached_memory_info
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+
         // Try to receive new data without blocking
         while let Ok(memory_info) = self.memory_receiver.try_recv() {
             *cached_info = memory_info;
         }
-        
+
         let (commit_total, commit_used, cached) = *cached_info;
-        
+
         MemoryData {
             total: sys.total_memory(),
             used: sys.used_memory(),
@@ -240,8 +248,14 @@ impl SystemCollector {
         let networks = self.networks.lock().unwrap_or_else(|e| e.into_inner());
         let (total_tx, total_rx) = Self::get_network_totals(&networks);
 
-        let mut last_tx = self.last_network_tx.lock().unwrap_or_else(|e| e.into_inner());
-        let mut last_rx = self.last_network_rx.lock().unwrap_or_else(|e| e.into_inner());
+        let mut last_tx = self
+            .last_network_tx
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut last_rx = self
+            .last_network_rx
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
 
         let upload_speed = total_tx.saturating_sub(*last_tx);
         let download_speed = total_rx.saturating_sub(*last_rx);
@@ -258,10 +272,9 @@ impl SystemCollector {
         }
 
         for (name, data) in networks.iter() {
-            if (data.received() > 0 || data.transmitted() > 0)
-                && adapter_name.is_empty() {
-                    adapter_name = name.clone();
-                }
+            if (data.received() > 0 || data.transmitted() > 0) && adapter_name.is_empty() {
+                adapter_name = name.clone();
+            }
         }
 
         NetworkData {
@@ -276,8 +289,14 @@ impl SystemCollector {
         let disks = self.disks.lock().unwrap_or_else(|e| e.into_inner());
         let (total_read, total_write) = Self::get_disk_totals(&disks);
 
-        let mut last_read = self.last_disk_read.lock().unwrap_or_else(|e| e.into_inner());
-        let mut last_write = self.last_disk_write.lock().unwrap_or_else(|e| e.into_inner());
+        let mut last_read = self
+            .last_disk_read
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut last_write = self
+            .last_disk_write
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
 
         let read_speed = total_read.saturating_sub(*last_read);
         let write_speed = total_write.saturating_sub(*last_write);
@@ -332,7 +351,7 @@ impl SystemCollector {
 #[cfg(windows)]
 fn get_cpu_temperature() -> Option<f32> {
     use std::process::Command;
-    
+
     // Try to get CPU temperature using PowerShell
     if let Ok(output) = Command::new("powershell")
         .args([
@@ -348,21 +367,21 @@ fn get_cpu_temperature() -> Option<f32> {
             }
         }
     }
-    
+
     None
 }
 
 #[cfg(not(windows))]
 fn get_cpu_temperature() -> Option<f32> {
     use std::fs;
-    
+
     // Try to read CPU temperature from sysfs on Linux
     if let Ok(content) = fs::read_to_string("/sys/class/thermal/thermal_zone0/temp") {
         if let Ok(temp_millidegrees) = content.trim().parse::<i32>() {
             return Some(temp_millidegrees as f32 / 1000.0);
         }
     }
-    
+
     None
 }
 
@@ -388,11 +407,11 @@ impl Default for SystemCollector {
 // Get local IP address by creating a UDP socket
 fn get_local_ip() -> Result<String, std::io::Error> {
     use std::net::UdpSocket;
-    
+
     // Connect to a public DNS server (doesn't actually send data)
     let socket = UdpSocket::bind("0.0.0.0:0")?;
     socket.connect("8.8.8.8:80")?;
-    
+
     match socket.local_addr() {
         Ok(addr) => {
             let ip = addr.ip();

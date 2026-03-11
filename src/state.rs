@@ -70,6 +70,7 @@ pub struct SystemData {
 pub struct HistoryBuffer {
     data: Vec<f32>,
     capacity: usize,
+    start: usize, // Circular buffer start index
 }
 
 impl HistoryBuffer {
@@ -77,14 +78,18 @@ impl HistoryBuffer {
         Self {
             data: Vec::with_capacity(capacity),
             capacity,
+            start: 0,
         }
     }
 
     pub fn push(&mut self, value: f32) {
-        if self.data.len() >= self.capacity {
-            self.data.remove(0);
+        if self.data.len() < self.capacity {
+            self.data.push(value);
+        } else {
+            // Circular buffer: overwrite oldest value
+            self.data[self.start] = value;
+            self.start = (self.start + 1) % self.capacity;
         }
-        self.data.push(value);
     }
 
     pub fn get(&self) -> &[f32] {

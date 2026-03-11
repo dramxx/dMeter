@@ -41,17 +41,26 @@ impl SystemCollector {
 
     pub fn collect(&mut self, _show_swap: bool) -> SystemData {
         {
-            let mut sys = self.sys.lock().unwrap();
+            let mut sys = self.sys.lock().unwrap_or_else(|e| {
+                log::error!("System mutex poisoned, recovering: {}", e);
+                e.into_inner()
+            });
             sys.refresh_all();
         }
 
         {
-            let mut networks = self.networks.lock().unwrap();
+            let mut networks = self.networks.lock().unwrap_or_else(|e| {
+                log::error!("Networks mutex poisoned, recovering: {}", e);
+                e.into_inner()
+            });
             networks.refresh();
         }
 
         {
-            let mut disks = self.disks.lock().unwrap();
+            let mut disks = self.disks.lock().unwrap_or_else(|e| {
+                log::error!("Disks mutex poisoned, recovering: {}", e);
+                e.into_inner()
+            });
             disks.refresh();
         }
 
@@ -72,7 +81,7 @@ impl SystemCollector {
     }
 
     fn collect_cpu(&self) -> CpuData {
-        let sys = self.sys.lock().unwrap();
+        let sys = self.sys.lock().unwrap_or_else(|e| e.into_inner());
         let cpus = sys.cpus();
 
         let name = cpus
@@ -100,7 +109,7 @@ impl SystemCollector {
     }
 
     fn collect_memory(&self) -> MemoryData {
-        let sys = self.sys.lock().unwrap();
+        let sys = self.sys.lock().unwrap_or_else(|e| e.into_inner());
         MemoryData {
             total: sys.total_memory(),
             used: sys.used_memory(),
@@ -110,11 +119,11 @@ impl SystemCollector {
     }
 
     fn collect_network(&self) -> NetworkData {
-        let networks = self.networks.lock().unwrap();
+        let networks = self.networks.lock().unwrap_or_else(|e| e.into_inner());
         let (total_tx, total_rx) = Self::get_network_totals(&networks);
 
-        let mut last_tx = self.last_network_tx.lock().unwrap();
-        let mut last_rx = self.last_network_rx.lock().unwrap();
+        let mut last_tx = self.last_network_tx.lock().unwrap_or_else(|e| e.into_inner());
+        let mut last_rx = self.last_network_rx.lock().unwrap_or_else(|e| e.into_inner());
 
         let upload_speed = total_tx.saturating_sub(*last_tx);
         let download_speed = total_rx.saturating_sub(*last_rx);
@@ -126,12 +135,12 @@ impl SystemCollector {
         let mut ip_address = String::new();
 
         for (name, data) in networks.iter() {
-            if data.received() > 0 || data.transmitted() > 0 {
-                if adapter_name.is_empty() {
+            if (data.received() > 0 || data.transmitted() > 0)
+                && adapter_name.is_empty() {
                     adapter_name = name.clone();
-                    ip_address = "127.0.0.1".to_string();
+                    // TODO: Implement actual IP address detection using platform-specific APIs
+                    ip_address = "N/A".to_string();
                 }
-            }
         }
 
         NetworkData {
@@ -143,7 +152,7 @@ impl SystemCollector {
     }
 
     fn collect_disks(&self) -> Vec<DiskData> {
-        let disks = self.disks.lock().unwrap();
+        let disks = self.disks.lock().unwrap_or_else(|e| e.into_inner());
         disks
             .iter()
             .map(|disk| DiskData {
@@ -157,7 +166,7 @@ impl SystemCollector {
     }
 
     fn collect_system(&self) -> SystemInfoData {
-        let _sys = self.sys.lock().unwrap();
+        let _sys = self.sys.lock().unwrap_or_else(|e| e.into_inner());
 
         let os_name = System::name().unwrap_or_else(|| "Unknown".to_string());
         let os_version = System::os_version().unwrap_or_else(|| "Unknown".to_string());

@@ -1,6 +1,7 @@
 pub mod colors;
 pub mod cpu;
 pub mod disk;
+pub mod gol;
 pub mod gpu;
 pub mod header;
 pub mod layout;
@@ -9,6 +10,7 @@ pub mod network;
 
 pub use cpu::*;
 pub use disk::*;
+pub use gol::*;
 pub use gpu::*;
 pub use header::*;
 pub use layout::*;

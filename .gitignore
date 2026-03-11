@@ -55,3 +55,5 @@ logs/
 # Local configuration
 config/local.toml
 config/development.toml
+
+nul

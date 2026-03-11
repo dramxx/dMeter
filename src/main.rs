@@ -16,7 +16,7 @@ use crate::config::CliArgs;
 use crate::state::{HistoryBuffer, SystemData};
 use crate::ui::{
     get_display_mode, render_cpu, render_disk, render_gpu, render_header, render_memory,
-    render_network, render_system_info,
+    render_network, render_system_info, GameOfLife,
 };
 use clap::Parser;
 
@@ -31,10 +31,12 @@ struct App {
     data: SystemData,
     cpu_history: HistoryBuffer,
     gpu_history: HistoryBuffer,
+    gol: Option<GameOfLife>,
     is_paused: bool,
     show_gpu: bool,
     show_swap: bool,
     interval: u64,
+    gol_tick: std::time::Instant,
 }
 
 impl App {
@@ -49,10 +51,12 @@ impl App {
             data: SystemData::default(),
             cpu_history: HistoryBuffer::new(60),
             gpu_history: HistoryBuffer::new(60),
+            gol: None,
             is_paused: false,
             show_gpu: !cli.no_gpu,
             show_swap: config.show_swap,
             interval: config.interval,
+            gol_tick: std::time::Instant::now(),
         }
     }
 
@@ -71,7 +75,7 @@ impl App {
 }
 
 fn main() -> io::Result<()> {
-    let result = std::panic::catch_unwind(|| main_inner());
+    let result = std::panic::catch_unwind(main_inner);
 
     if let Err(e) = result {
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
@@ -162,17 +166,19 @@ fn main_inner() -> io::Result<()> {
             tick_timer = std::time::Instant::now();
         }
 
+        if app.gol_tick.elapsed() >= Duration::from_millis(200) {
+            if let Some(ref mut gol) = app.gol {
+                gol.step();
+            }
+            app.gol_tick = std::time::Instant::now();
+        }
+
         let size = terminal.size()?;
         let mode = get_display_mode(size.height);
 
-        if size.width < 80 || size.height < 24 {
-            // Skip rendering when too small to avoid crashes
-            // terminal.draw(|f| {
-            //     render_minimum_size_warning(f, f.area());
-            // })?;
-        } else {
+        if size.width >= 80 && size.height >= 24 {
             terminal.draw(|f| {
-                render_ui(f, &app, mode);
+                render_ui(f, &mut app, mode);
             })?;
         }
     }
@@ -183,7 +189,7 @@ fn main_inner() -> io::Result<()> {
     Ok(())
 }
 
-fn render_ui(f: &mut Frame, app: &App, mode: crate::ui::DisplayMode) {
+fn render_ui(f: &mut Frame, app: &mut App, mode: crate::ui::DisplayMode) {
     let area = f.area();
 
     if area.width < 40 || area.height < 10 {
@@ -222,7 +228,7 @@ fn render_ui(f: &mut Frame, app: &App, mode: crate::ui::DisplayMode) {
     }
 }
 
-fn render_compact_mode(f: &mut Frame, area: Rect, app: &App) {
+fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
     // Panel height for top row
     let panel_height = 4u16;
 
@@ -270,11 +276,11 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &App) {
     render_disk(f, disk_area, &app.data.disks);
 }
 
-fn render_standard_mode(f: &mut Frame, area: Rect, app: &App) {
+fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
     // Panel heights
-    let panel_height = 7u16;
+    let panel_height = 6u16;
     let history_height = 3u16;
-    let network_height = 5u16;
+    let network_height = 4u16;
 
     // Calculate width for each column
     let col1_width = area.width / 3;
@@ -305,6 +311,13 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &App) {
         network_height,
     );
 
+    // Game of Life row (fills remaining height)
+    let gol_y = network_y + network_height + 1;
+    let gol_height = area
+        .height
+        .saturating_sub(panel_height + history_height + network_height + 2);
+    let gol_area = Rect::new(area.x, gol_y, area.width, gol_height);
+
     render_cpu(
         f,
         cpu_area,
@@ -319,6 +332,50 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &App) {
     render_cpu_history(f, history_area, app.cpu_history.get());
     render_network(f, net_area, &app.data.network);
     render_disk(f, disk_area, &app.data.disks);
+
+    // Create inner container with padding (no border)
+    let inner_gol_area = gol_area.inner(Margin::new(6, 3)); // 6-char padding X, 3-char padding Y
+    let gol_width = inner_gol_area.width as u32;
+    let gol_height = inner_gol_area.height as u32;
+
+    if gol_width > 2 && gol_height > 2 {
+        if app.gol.is_none()
+            || app
+                .gol
+                .as_ref()
+                .map(|g| g.width != gol_width || g.height != gol_height)
+                .unwrap_or(true)
+        {
+            app.gol = Some(GameOfLife::new(gol_width, gol_height));
+        }
+
+        if let Some(ref gol) = app.gol {
+            let cells = gol.get_cells();
+            let gen = gol.generation();
+
+            let title = format!(" Conway's Game of Life | Generation: {} ", gen);
+            let gol_block = Block::default()
+                .title(title)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
+            f.render_widget(gol_block, gol_area);
+
+            // Calculate centered position within inner container
+            let max_width = inner_gol_area.width;
+            let max_height = inner_gol_area.height;
+            let center_x = inner_gol_area.x + (max_width.saturating_sub(gol.width as u16)) / 2;
+            let center_y = inner_gol_area.y + (max_height.saturating_sub(gol.height as u16)) / 2;
+
+            for y in 0..gol.height {
+                for x in 0..gol.width {
+                    if cells.contains(&(x, y)) {
+                        let cell_rect = Rect::new(center_x + x as u16, center_y + y as u16, 1, 1);
+                        f.render_widget(Span::raw("■").fg(Color::Rgb(60, 60, 60)), cell_rect);
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn render_cpu_history(f: &mut Frame, area: Rect, history: &[f32]) {

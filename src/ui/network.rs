@@ -41,7 +41,7 @@ pub fn render_network(
     let text_width = text_content.len() as u16 + 2;
     let sparkline_width = (inner.width.saturating_sub(text_width) as usize).max(20);
 
-    // Render sparkline on the left
+    // Render sparkline on the left with adaptive scaling
     if !rx_history.is_empty() && !tx_history.is_empty() {
         let combined_sparkline = render_sparkline(rx_history, sparkline_width);
         f.render_widget(

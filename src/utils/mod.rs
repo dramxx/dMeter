@@ -104,3 +104,4 @@ pub fn render_sparkline(data: &[f32], width: usize) -> String {
 
     result
 }
+

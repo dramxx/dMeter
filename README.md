@@ -1,31 +1,26 @@
 # dMeter
 
-A fast, beautiful terminal system monitor built with Rust and Ratatui.
+A fast, beautiful terminal system monitor built with Rust and Ratatui, featuring **Conway's Game of Life** as the centerpiece.
 
 ## Features
 
+### Conway's Game of Life <3
+
 ### System Monitoring
 
-- **CPU**: Real-time per-core and overall usage with sparkline history graphs
-- **Memory**:
-  - RAM and SWAP usage with progress bars
-  - Commit memory tracking (Windows)
-  - Cached memory display (Windows)
-- **GPU**: NVIDIA GPU monitoring with VRAM tracking
-  - Windows: NVML support
-  - Linux: nvidia-smi integration
-  - Real-time usage, temperature, and memory statistics
-  - GPU and VRAM history sparklines
-- **Disk**: Multi-disk usage for all mounted volumes
-- **Network**: Real-time network I/O statistics with adapter information
-- **Disk I/O**: Read/write speeds monitoring
+- **CPU**: Real-time usage with temperature, fan speed, and power monitoring
+- **Memory**: RAM usage with progress bars and extended memory tracking (Windows)
+- **GPU**: NVIDIA GPU monitoring with VRAM tracking and history graphs
+- **Disk**: Multi-disk usage for all mounted volumes with responsive bars
+- **Network**: Real-time network I/O statistics with history sparklines
+- **Disk I/O**: Read/write speeds monitoring with visual graphs
 
 ### Visualization
 
-- **History Graphs**: CPU, RAM, GPU, and VRAM sparkline visualizations
-- **Conway's Game of Life**: Interactive cellular automaton background animation
+- **History Graphs**: CPU, RAM, GPU, VRAM, Network, and Disk I/O sparklines
+- **Game of Life**: The star feature - mesmerizing cellular automaton animation
 - **Color-coded Metrics**: Intuitive color scheme for quick status assessment
-- **Responsive Layout**: Adapts to terminal size with compact mode support
+- **Responsive Layout**: Adapts to terminal size with proper spacing
 
 ## Installation
 
@@ -56,13 +51,11 @@ The binary will be at `target/release/dmeter` (Linux/macOS) or `target/release/d
 ```bash
 dmeter                    # Run with defaults (2-second refresh)
 dmeter --interval 5       # Custom refresh interval (seconds)
-dmeter --no-gpu           # Skip GPU panel
 ```
 
 ### Controls
 
 - `q` or `Ctrl+C` - Quit
-- `p` - Pause/Resume updates
 - `r` - Force refresh
 
 ## Configuration

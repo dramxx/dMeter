@@ -9,9 +9,6 @@ use std::path::PathBuf;
 pub struct CliArgs {
     #[arg(short, long, default_value_t = 2, help = "Refresh interval in seconds")]
     pub interval: u64,
-
-    #[arg(short, long, default_value_t = false, help = "Skip GPU panel")]
-    pub no_gpu: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

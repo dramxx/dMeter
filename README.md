@@ -18,9 +18,10 @@ A fast, beautiful terminal system monitor built with Rust and Ratatui, featuring
 ### Visualization
 
 - **History Graphs**: CPU, RAM, GPU, VRAM, Network, and Disk I/O sparklines
-- **Game of Life**: The star feature - mesmerizing cellular automaton animation
+- **Game of Life**: The star feature - mesmerizing cellular automaton with half-block rendering for 2x vertical resolution
 - **Color-coded Metrics**: Intuitive color scheme for quick status assessment
-- **Responsive Layout**: Adapts to terminal size with proper spacing
+- **Dynamic Layout**: Automatically adapts UI when no GPU is detected - widgets expand to fill freed space
+- **Responsive Design**: Adapts to terminal size with proper spacing
 
 ## Installation
 
@@ -63,8 +64,14 @@ dmeter --interval 5       # Custom refresh interval (seconds)
 Config file location: `~/.config/dmeter/config.toml` (Linux/macOS) or `%APPDATA%\dmeter\config.toml` (Windows)
 
 ```toml
-interval = 2        # Refresh interval in seconds
-show_swap = true    # Show swap memory usage
+interval = 2        # Refresh interval in seconds (default: 2)
+```
+
+### Command-Line Options
+
+```bash
+dmeter --interval 5  # Set refresh interval to 5 seconds
+dmeter -i 3          # Short form
 ```
 
 ## Performance

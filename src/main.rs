@@ -38,7 +38,6 @@ struct App {
     disk_read_history: HistoryBuffer,
     disk_write_history: HistoryBuffer,
     gol: Option<GameOfLife>,
-    show_swap: bool,
     interval: u64,
     gol_tick: std::time::Instant,
 }
@@ -62,14 +61,13 @@ impl App {
             disk_read_history: HistoryBuffer::new(60),
             disk_write_history: HistoryBuffer::new(60),
             gol: None,
-            show_swap: config.show_swap,
             interval: config.interval,
             gol_tick: std::time::Instant::now(),
         }
     }
 
     fn update(&mut self) {
-        self.data = self.collector.collect(self.show_swap);
+        self.data = self.collector.collect(true);
         self.cpu_history.push(self.data.cpu.usage);
 
         // RAM usage percentage
@@ -332,7 +330,7 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
 
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Compact, app.cpu_history.get());
         render_gpu(f, gpu_area, &app.data.gpu);
-        render_memory(f, mem_area, &app.data.memory, app.show_swap);
+        render_memory(f, mem_area, &app.data.memory, true);
         render_cpu_history(f, cpu_history_area, app.cpu_history.get());
         render_ram_history(f, ram_history_area, app.ram_history.get());
         render_gpu_history(f, gpu_history_area, app.gpu_history.get());
@@ -365,7 +363,7 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
         let disk_io_area = Rect::new(area.x, disk_io_y, area.width, disk_io_height);
 
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Compact, app.cpu_history.get());
-        render_memory(f, mem_area, &app.data.memory, app.show_swap);
+        render_memory(f, mem_area, &app.data.memory, true);
         render_cpu_history(f, cpu_history_area, app.cpu_history.get());
         render_ram_history(f, ram_history_area, app.ram_history.get());
         render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
@@ -417,7 +415,7 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
 
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Standard, app.cpu_history.get());
         render_gpu(f, gpu_area, &app.data.gpu);
-        render_memory(f, mem_area, &app.data.memory, app.show_swap);
+        render_memory(f, mem_area, &app.data.memory, true);
         render_cpu_history(f, cpu_history_area, app.cpu_history.get());
         render_ram_history(f, ram_history_area, app.ram_history.get());
         render_gpu_history(f, gpu_history_area, app.gpu_history.get());
@@ -456,7 +454,7 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
         let gol_area = Rect::new(area.x, gol_y, area.width, gol_height);
 
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Standard, app.cpu_history.get());
-        render_memory(f, mem_area, &app.data.memory, app.show_swap);
+        render_memory(f, mem_area, &app.data.memory, true);
         render_cpu_history(f, cpu_history_area, app.cpu_history.get());
         render_ram_history(f, ram_history_area, app.ram_history.get());
         render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());

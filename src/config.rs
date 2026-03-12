@@ -14,14 +14,12 @@ pub struct CliArgs {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub interval: u64,
-    pub show_swap: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             interval: 2,
-            show_swap: true,
         }
     }
 }
@@ -69,7 +67,6 @@ mod tests {
     fn test_config_default() {
         let config = Config::default();
         assert_eq!(config.interval, 2);
-        assert!(config.show_swap);
     }
 
     #[test]
@@ -80,33 +77,28 @@ mod tests {
         config.merge_cli(&cli);
         
         assert_eq!(config.interval, 5);
-        assert!(config.show_swap);
     }
 
     #[test]
     fn test_config_from_toml() {
         let toml_str = r#"
 interval = 3
-show_swap = false
 "#;
         
         let config: Config = toml::from_str(toml_str).unwrap();
         
         assert_eq!(config.interval, 3);
-        assert!(!config.show_swap);
     }
 
     #[test]
     fn test_config_partial_toml() {
         let partial_toml = r#"
 interval = 4
-show_swap = true
 "#;
         
         let config: Config = toml::from_str(partial_toml).unwrap();
         
         assert_eq!(config.interval, 4);
-        assert!(config.show_swap);
     }
 
     #[test]

@@ -469,7 +469,7 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
 
 fn render_game_of_life(f: &mut Frame, gol_area: Rect, app: &mut App) {
     // Create inner container with padding (no border)
-    let inner_gol_area = gol_area.inner(Margin::new(6, 3)); // 6-char padding X, 3-char padding Y
+    let inner_gol_area = gol_area.inner(Margin::new(2, 2)); // 2-char padding on all sides
     let gol_width = inner_gol_area.width as u32;
     let gol_height = (inner_gol_area.height as u32) * 2; // 2 game rows per terminal row
 

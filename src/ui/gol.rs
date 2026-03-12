@@ -116,3 +116,30 @@ fn rand_simple(x: u32, y: u32, seed: u32) -> bool {
     let n = (n ^ (n >> 13)).wrapping_mul(1274126177);
     (n ^ (n >> 16)) & 1 == 1
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vertical_neighbors() {
+        let mut gol = GameOfLife::new(5, 5);
+        gol.cells.clear();
+        
+        // Create vertical stack at (2, 1) and (2, 2)
+        gol.cells.insert((2, 1));
+        gol.cells.insert((2, 2));
+        
+        // Cell at (2, 1) should have 1 neighbor (the cell below at (2, 2))
+        assert_eq!(gol.count_neighbors(2, 1), 1);
+        
+        // Cell at (2, 2) should have 1 neighbor (the cell above at (2, 1))
+        assert_eq!(gol.count_neighbors(2, 2), 1);
+        
+        // Add a third cell above at (2, 0)
+        gol.cells.insert((2, 0));
+        
+        // Now (2, 1) should have 2 neighbors (above and below)
+        assert_eq!(gol.count_neighbors(2, 1), 2);
+    }
+}

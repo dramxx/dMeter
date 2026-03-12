@@ -471,7 +471,7 @@ fn render_game_of_life(f: &mut Frame, gol_area: Rect, app: &mut App) {
     // Create inner container with padding (no border)
     let inner_gol_area = gol_area.inner(Margin::new(6, 3)); // 6-char padding X, 3-char padding Y
     let gol_width = inner_gol_area.width as u32;
-    let gol_height = inner_gol_area.height as u32;
+    let gol_height = (inner_gol_area.height as u32) * 2; // 2 game rows per terminal row
 
     if gol_width > 2 && gol_height > 2 {
         if app.gol.is_none()
@@ -509,21 +509,28 @@ fn render_game_of_life(f: &mut Frame, gol_area: Rect, app: &mut App) {
                     Rect::new(text_x, text_y, text.len() as u16, 1),
                 );
             } else {
-                // Calculate centered position within inner container
-                let max_width = inner_gol_area.width;
-                let max_height = inner_gol_area.height;
-                let center_x = inner_gol_area.x + (max_width.saturating_sub(gol.width as u16)) / 2;
-                let center_y =
-                    inner_gol_area.y + (max_height.saturating_sub(gol.height as u16)) / 2;
+                let cell_color = Color::Rgb(60, 60, 60);
 
-                for y in 0..gol.height {
-                    for x in 0..gol.width {
-                        if cells.contains(&(x, y)) {
-                            let cell_x = center_x.saturating_add(x as u16);
-                            let cell_y = center_y.saturating_add(y as u16);
-                            let cell_rect = Rect::new(cell_x, cell_y, 1, 1);
-                            f.render_widget(Span::raw("■").fg(Color::Rgb(60, 60, 60)), cell_rect);
-                        }
+                for term_y in 0..inner_gol_area.height {
+                    for term_x in 0..inner_gol_area.width {
+                        let game_x = term_x as u32;
+                        let top_y = (term_y as u32) * 2;
+                        let bot_y = top_y + 1;
+
+                        let top = cells.contains(&(game_x, top_y));
+                        let bot = bot_y < gol.height && cells.contains(&(game_x, bot_y));
+
+                        let ch = match (top, bot) {
+                            (true, true) => "█",
+                            (true, false) => "▀",
+                            (false, true) => "▄",
+                            (false, false) => continue, // skip empty, avoid unnecessary renders
+                        };
+
+                        f.render_widget(
+                            Span::raw(ch).fg(cell_color),
+                            Rect::new(inner_gol_area.x + term_x, inner_gol_area.y + term_y, 1, 1),
+                        );
                     }
                 }
             }

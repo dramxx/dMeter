@@ -256,7 +256,7 @@ mod tests {
         
         // If temperature is present, it should be reasonable
         if let Some(temp) = gpu_data.temperature {
-            assert!(temp >= 0.0 && temp <= 150.0); // Reasonable GPU temp range
+            assert!((0.0..=150.0).contains(&temp)); // Reasonable GPU temp range
         }
         
         // If fan speed is present, it should be 0-100%

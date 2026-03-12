@@ -16,7 +16,7 @@ use crate::config::CliArgs;
 use crate::state::{HistoryBuffer, SystemData};
 use crate::ui::{
     get_display_mode, render_cpu, render_disk, render_disk_io, render_gpu, render_header,
-    render_memory, render_network, render_system_info, GameOfLife,
+    render_memory, render_network, render_processes, render_system_info, GameOfLife,
 };
 use clap::Parser;
 
@@ -38,6 +38,7 @@ struct App {
     disk_read_history: HistoryBuffer,
     disk_write_history: HistoryBuffer,
     gol: Option<GameOfLife>,
+    show_processes: bool,
     interval: u64,
     gol_tick: std::time::Instant,
 }
@@ -61,13 +62,14 @@ impl App {
             disk_read_history: HistoryBuffer::new(60),
             disk_write_history: HistoryBuffer::new(60),
             gol: None,
+            show_processes: false,
             interval: config.interval,
             gol_tick: std::time::Instant::now(),
         }
     }
 
     fn update(&mut self) {
-        self.data = self.collector.collect(true);
+        self.data = self.collector.collect();
         self.cpu_history.push(self.data.cpu.usage);
 
         // RAM usage percentage
@@ -178,6 +180,9 @@ fn main_inner() -> io::Result<()> {
                                 running.store(false, Ordering::SeqCst);
                             }
                         }
+                        KeyCode::Char(' ') => {
+                            app.show_processes = !app.show_processes;
+                        }
                         _ => {}
                     }
                 }
@@ -193,7 +198,7 @@ fn main_inner() -> io::Result<()> {
             tick_timer = std::time::Instant::now();
         }
 
-        if app.gol_tick.elapsed() >= Duration::from_millis(200) {
+        if !app.show_processes && app.gol_tick.elapsed() >= Duration::from_millis(200) {
             if let Some(ref mut gol) = app.gol {
                 gol.step();
             }
@@ -424,7 +429,7 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
         render_disk(f, disk_area, &app.data.disks);
         render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
 
-        render_game_of_life(f, gol_area, app);
+        render_bottom_widget(f, gol_area, app);
     } else {
         // No GPU: 2-column layout with expanded Game of Life
         let col_width = area.width / 2;
@@ -461,74 +466,75 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
         render_disk(f, disk_area, &app.data.disks);
         render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
 
-        render_game_of_life(f, gol_area, app);
+        render_bottom_widget(f, gol_area, app);
     }
 }
 
-fn render_game_of_life(f: &mut Frame, gol_area: Rect, app: &mut App) {
-    // Create inner container with padding (no border)
-    let inner_gol_area = gol_area.inner(Margin::new(2, 2)); // 2-char padding on all sides
-    let gol_width = inner_gol_area.width as u32;
-    let gol_height = (inner_gol_area.height as u32) * 2; // 2 game rows per terminal row
+fn render_bottom_widget(f: &mut Frame, gol_area: Rect, app: &mut App) {
+    if app.show_processes {
+        // Render process widget
+        render_processes(f, gol_area, &app.data.processes);
+    } else {
+        // Render Game of Life
+        // Create inner container with padding (no border)
+        let inner_gol_area = gol_area.inner(Margin::new(2, 2)); // 2-char padding on all sides
+        let gol_width = inner_gol_area.width as u32;
+        let gol_height = (inner_gol_area.height as u32) * 2; // 2 game rows per terminal row
 
-    if gol_width > 2 && gol_height > 2 {
-        if app.gol.is_none()
-            || app
-                .gol
-                .as_ref()
-                .map(|g| g.width != gol_width || g.height != gol_height)
-                .unwrap_or(true)
-        {
-            app.gol = Some(GameOfLife::new(gol_width, gol_height));
-        }
+        if gol_width > 2 && gol_height > 2 {
+            if app.gol.as_ref().is_none_or(|g| g.width != gol_width || g.height != gol_height) {
+                app.gol = Some(GameOfLife::new(gol_width, gol_height));
+            }
 
-        if let Some(ref gol) = app.gol {
-            let cells = gol.get_cells();
-            let gen = gol.generation();
+            if let Some(ref gol) = app.gol {
+                let cells = gol.get_cells();
+                let gen = gol.generation();
 
-            let title = format!(" Conway's Game of Life | Generation: {} ", gen);
-            let gol_block = Block::default()
-                .title(title)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
-            f.render_widget(gol_block, gol_area);
+                let title = format!(" Conway's Game of Life | Generation: {gen} ");
+                let gol_block = Block::default()
+                    .title(title)
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
+                f.render_widget(gol_block, gol_area);
 
-            // Check if game is dead and show appropriate content
-            if gol.is_dead() {
-                // Show "all died." text in center
-                let text = "all died.";
-                let text_x =
-                    inner_gol_area.x + (inner_gol_area.width.saturating_sub(text.len() as u16)) / 2;
-                let text_y = inner_gol_area.y + inner_gol_area.height / 2;
+                // Check if game is dead and show appropriate content
+                if gol.is_dead() {
+                    // Show "all died." text in center
+                    let text = "all died.";
+                    let text_len = u16::try_from(text.len()).unwrap_or(u16::MAX);
+                    let text_x =
+                        inner_gol_area.x + (inner_gol_area.width.saturating_sub(text_len)) / 2;
+                    let text_y = inner_gol_area.y + inner_gol_area.height / 2;
 
-                f.render_widget(
-                    Paragraph::new(Span::raw(text))
-                        .style(Style::default().fg(ratatui::style::Color::DarkGray)),
-                    Rect::new(text_x, text_y, text.len() as u16, 1),
-                );
-            } else {
-                let cell_color = Color::Rgb(60, 60, 60);
+                    f.render_widget(
+                        Paragraph::new(Span::raw(text))
+                            .style(Style::default().fg(ratatui::style::Color::DarkGray)),
+                        Rect::new(text_x, text_y, text_len, 1),
+                    );
+                } else {
+                    let cell_color = Color::Rgb(60, 60, 60);
 
-                for term_y in 0..inner_gol_area.height {
-                    for term_x in 0..inner_gol_area.width {
-                        let game_x = term_x as u32;
-                        let top_y = (term_y as u32) * 2;
-                        let bot_y = top_y + 1;
+                    for term_y in 0..inner_gol_area.height {
+                        for term_x in 0..inner_gol_area.width {
+                            let game_x = u32::from(term_x);
+                            let top_y = u32::from(term_y) * 2;
+                            let bot_y = top_y + 1;
 
-                        let top = cells.contains(&(game_x, top_y));
-                        let bot = bot_y < gol.height && cells.contains(&(game_x, bot_y));
+                            let top = cells.contains(&(game_x, top_y));
+                            let bot = bot_y < gol.height && cells.contains(&(game_x, bot_y));
 
-                        let ch = match (top, bot) {
-                            (true, true) => "█",
-                            (true, false) => "▀",
-                            (false, true) => "▄",
-                            (false, false) => continue, // skip empty, avoid unnecessary renders
-                        };
+                            let ch = match (top, bot) {
+                                (true, true) => "█",
+                                (true, false) => "▀",
+                                (false, true) => "▄",
+                                (false, false) => continue, // skip empty, avoid unnecessary renders
+                            };
 
-                        f.render_widget(
-                            Span::raw(ch).fg(cell_color),
-                            Rect::new(inner_gol_area.x + term_x, inner_gol_area.y + term_y, 1, 1),
-                        );
+                            f.render_widget(
+                                Span::raw(ch).fg(cell_color),
+                                Rect::new(inner_gol_area.x + term_x, inner_gol_area.y + term_y, 1, 1),
+                            );
+                        }
                     }
                 }
             }
@@ -623,6 +629,35 @@ fn render_gpu_history(f: &mut Frame, area: Rect, history: &[f32]) {
     );
 }
 
+fn render_vram_history(f: &mut Frame, area: Rect, history: &[f32]) {
+    use ratatui::widgets::{Block, Borders};
+
+    if history.is_empty() {
+        return;
+    }
+
+    let block = Block::default()
+        .title(" VRAM History ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
+
+    f.render_widget(block, area);
+
+    let inner = area.inner(Margin::new(1, 1));
+    let inner_width = inner.width as usize;
+
+    if inner_width < 10 {
+        return;
+    }
+
+    let sparkline = crate::utils::render_sparkline(history, inner_width);
+
+    f.render_widget(
+        Paragraph::new(Span::raw(sparkline)).style(Style::default().fg(Color::Magenta)),
+        inner,
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -674,12 +709,12 @@ mod tests {
         
         // If no GPU, should have default values
         if !app.data.gpu.available {
-            assert_eq!(app.data.gpu.usage, 0.0);
+            assert!((app.data.gpu.usage - 0.0).abs() < f32::EPSILON);
             assert_eq!(app.data.gpu.memory_used, 0);
             assert_eq!(app.data.gpu.memory_total, 0);
             
             // GPU history should still work (just with zeros)
-            assert!(app.gpu_history.get().is_empty() || app.gpu_history.get()[0] == 0.0);
+            assert!(app.gpu_history.get().is_empty() || (app.gpu_history.get()[0] - 0.0).abs() < f32::EPSILON);
         }
     }
 
@@ -697,7 +732,7 @@ mod tests {
         
         // Values should be within valid ranges
         for &cpu_val in app.cpu_history.get() {
-            assert!(cpu_val >= 0.0 && cpu_val <= 100.0);
+            assert!((0.0..=100.0).contains(&cpu_val));
         }
     }
 
@@ -754,33 +789,53 @@ mod tests {
         // Game of Life should be None initially
         assert!(app.gol.is_none());
     }
-}
 
-fn render_vram_history(f: &mut Frame, area: Rect, history: &[f32]) {
-    use ratatui::widgets::{Block, Borders};
-
-    if history.is_empty() {
-        return;
+    #[test]
+    fn test_app_process_toggle() {
+        let cli = CliArgs { interval: 2 };
+        let mut app = App::new(cli);
+        
+        // Should start with Game of Life (show_processes = false)
+        assert!(!app.show_processes);
+        
+        // Toggle to processes
+        app.show_processes = !app.show_processes;
+        assert!(app.show_processes);
+        
+        // Toggle back to Game of Life
+        app.show_processes = !app.show_processes;
+        assert!(!app.show_processes);
     }
 
-    let block = Block::default()
-        .title(" VRAM History ")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
-
-    f.render_widget(block, area);
-
-    let inner = area.inner(Margin::new(1, 1));
-    let inner_width = inner.width as usize;
-
-    if inner_width < 10 {
-        return;
+    #[test]
+    fn test_app_process_data_collection() {
+        let cli = CliArgs { interval: 2 };
+        let mut app = App::new(cli);
+        app.update();
+        
+        // Should have collected process data
+        assert!(!app.data.processes.is_empty());
+        
+        // Processes should be sorted by combined resource usage
+        if app.data.processes.len() > 1 {
+            let first_score = app.data.processes[0].cpu_usage + app.data.processes[0].memory_usage;
+            let second_score = app.data.processes[1].cpu_usage + app.data.processes[1].memory_usage;
+            assert!(first_score >= second_score);
+        }
     }
 
-    let sparkline = crate::utils::render_sparkline(history, inner_width);
-
-    f.render_widget(
-        Paragraph::new(Span::raw(sparkline)).style(Style::default().fg(Color::Magenta)),
-        inner,
-    );
+    #[test]
+    fn test_app_process_data_validity() {
+        let cli = CliArgs { interval: 2 };
+        let mut app = App::new(cli);
+        app.update();
+        
+        // Check that process data is valid
+        for process in &app.data.processes {
+            assert!(!process.name.is_empty());
+            assert!(process.cpu_usage >= 0.0);
+            assert!(process.memory_usage >= 0.0);
+            assert!(process.memory_usage <= 100.0);
+        }
+    }
 }

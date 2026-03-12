@@ -125,6 +125,14 @@ impl Default for SystemInfoData {
     }
 }
 
+pub struct ProcessData {
+    pub name: String,
+    pub cpu_usage: f32,
+    pub memory_usage: f32,  // Percentage
+    #[allow(dead_code)]
+    pub memory_bytes: u64,
+}
+
 #[derive(Default)]
 pub struct SystemData {
     pub cpu: CpuData,
@@ -134,6 +142,7 @@ pub struct SystemData {
     pub disks: Vec<DiskData>,
     pub disk_io: DiskIOData,
     pub system: SystemInfoData,
+    pub processes: Vec<ProcessData>,
 }
 
 pub struct HistoryBuffer {

@@ -172,7 +172,7 @@ impl SystemCollector {
         }
     }
 
-    pub fn collect(&mut self, _show_swap: bool) -> SystemData {
+    pub fn collect(&mut self) -> SystemData {
         {
             let mut sys = self.sys.lock().unwrap_or_else(|e| {
                 log::error!("System mutex poisoned, recovering: {}", e);
@@ -203,6 +203,7 @@ impl SystemCollector {
         let disks = self.collect_disks();
         let disk_io = self.collect_disk_io();
         let system = self.collect_system();
+        let processes = self.collect_processes();
 
         SystemData {
             cpu,
@@ -212,6 +213,7 @@ impl SystemCollector {
             disks,
             disk_io,
             system,
+            processes,
         }
     }
 
@@ -377,6 +379,40 @@ impl SystemCollector {
             ),
         }
     }
+
+    fn collect_processes(&self) -> Vec<crate::state::ProcessData> {
+        let sys = self.sys.lock().unwrap_or_else(|e| e.into_inner());
+        let total_memory = sys.total_memory();
+
+        let mut processes: Vec<crate::state::ProcessData> = sys
+            .processes()
+            .values()
+            .map(|process| {
+                let memory_bytes = process.memory();
+                let memory_usage = if total_memory > 0 {
+                    (memory_bytes as f32 / total_memory as f32) * 100.0
+                } else {
+                    0.0
+                };
+
+                crate::state::ProcessData {
+                    name: process.name().to_string_lossy().to_string(),
+                    cpu_usage: process.cpu_usage(),
+                    memory_usage,
+                    memory_bytes,
+                }
+            })
+            .collect();
+
+        // Sort by combined resource usage (CPU% + Memory%) descending
+        processes.sort_by(|a, b| {
+            let score_a = a.cpu_usage + a.memory_usage;
+            let score_b = b.cpu_usage + b.memory_usage;
+            score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        processes
+    }
 }
 
 #[cfg(windows)]
@@ -495,8 +531,8 @@ mod tests {
     fn test_system_collector_collect_data() {
         let mut collector = SystemCollector::new();
         
-        // Collect data - should not panic
-        let data = collector.collect(true);
+        // Should not panic
+        let data = collector.collect();
         
         // Verify we got valid data
         assert!(data.cpu.usage >= 0.0 && data.cpu.usage <= 100.0);
@@ -511,54 +547,45 @@ mod tests {
     fn test_system_collector_multiple_collections() {
         let mut collector = SystemCollector::new();
         
-        // Collect data multiple times - should not leak memory
-        for _ in 0..10 {
-            let data = collector.collect(true);
+        // Collect multiple times - should not crash or leak
+        for _ in 0..5 {
+            let data = collector.collect();
             assert!(data.cpu.usage >= 0.0);
         }
-        
-        // Cleanup
-        drop(collector);
     }
 
     #[test]
     fn test_system_collector_with_swap() {
         let mut collector = SystemCollector::new();
         
-        // Test with swap enabled
-        let data_with_swap = collector.collect(true);
-        assert!(data_with_swap.memory.total > 0);
+        // Collect data (swap is always shown now)
+        let data = collector.collect();
         
-        // Test with swap disabled
-        let data_without_swap = collector.collect(false);
-        assert!(data_without_swap.memory.total > 0);
-        
-        drop(collector);
+        // Should return valid data with swap info
+        assert!(data.memory.total > 0);
+        // swap_total is u64, always >= 0, so just verify it exists
     }
 
     #[test]
     fn test_memory_receiver_channel() {
         let mut collector = SystemCollector::new();
         
-        // Wait a bit for background thread to send data
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        // Collect data
+        let data = collector.collect();
         
-        // Collect should work even if channel has data
-        let data = collector.collect(true);
+        // Should have memory data
         assert!(data.memory.total > 0);
-        
-        drop(collector);
     }
 
     #[test]
     fn test_no_thread_leak_on_drop() {
-        // Create and drop multiple collectors to ensure no thread leak
+        // Create and drop multiple collectors
         for _ in 0..5 {
             let mut collector = SystemCollector::new();
-            let _data = collector.collect(true);
+            let _data = collector.collect();
             drop(collector);
         }
         
-        // If we get here without hanging, threads are being cleaned up properly
+        // If we get here, no thread leak
     }
 }

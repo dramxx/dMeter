@@ -8,6 +8,7 @@ pub mod header;
 pub mod layout;
 pub mod memory;
 pub mod network;
+pub mod processes;
 
 pub use cpu::*;
 pub use disk::*;
@@ -18,3 +19,4 @@ pub use header::*;
 pub use layout::*;
 pub use memory::*;
 pub use network::*;
+pub use processes::*;

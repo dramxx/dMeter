@@ -19,6 +19,7 @@ A fast, beautiful terminal system monitor built with Rust and Ratatui, featuring
 
 - **History Graphs**: CPU, RAM, GPU, VRAM, Network, and Disk I/O sparklines
 - **Game of Life**: The star feature - mesmerizing cellular automaton with half-block rendering for 2x vertical resolution
+- **Process Viewer**: Toggle to view running processes sorted by resource usage (CPU + Memory) in dual-column layout
 - **Color-coded Metrics**: Intuitive color scheme for quick status assessment
 - **Dynamic Layout**: Automatically adapts UI when no GPU is detected - widgets expand to fill freed space
 - **Responsive Design**: Adapts to terminal size with proper spacing
@@ -58,6 +59,7 @@ dmeter --interval 5       # Custom refresh interval (seconds)
 
 - `q` or `Ctrl+C` - Quit
 - `r` - Force refresh
+- `Space` - Toggle between Game of Life and Process Viewer
 
 ## Configuration
 

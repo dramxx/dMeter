@@ -161,3 +161,112 @@ fn try_nvidia() -> Result<GpuData, String> {
 
     Err("No GPU detected on Linux".to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_collect_gpu_data_no_crash() {
+        // Should not panic even if no GPU is present
+        let gpu_data = collect_gpu_data();
+        
+        // Should return valid GpuData struct
+        assert!(gpu_data.usage >= 0.0);
+        assert!(gpu_data.memory_used <= gpu_data.memory_total);
+    }
+
+    #[test]
+    fn test_default_gpu_data() {
+        let gpu_data = default_gpu_data();
+        
+        // Verify default values
+        assert!(!gpu_data.available);
+        assert_eq!(gpu_data.name, "No GPU / Not detected");
+        assert_eq!(gpu_data.usage, 0.0);
+        assert_eq!(gpu_data.memory_used, 0);
+        assert_eq!(gpu_data.memory_total, 0);
+        assert!(gpu_data.temperature.is_none());
+        assert!(gpu_data.fan_speed.is_none());
+        assert!(gpu_data.power_draw.is_none());
+    }
+
+    #[test]
+    fn test_gpu_data_available_flag() {
+        let gpu_data = collect_gpu_data();
+        
+        // If GPU is not available, all optional fields should be None or 0
+        if !gpu_data.available {
+            assert_eq!(gpu_data.usage, 0.0);
+            assert_eq!(gpu_data.memory_used, 0);
+            assert_eq!(gpu_data.memory_total, 0);
+        } else {
+            // If GPU is available, should have valid data
+            assert!(!gpu_data.name.is_empty());
+            assert!(gpu_data.usage >= 0.0 && gpu_data.usage <= 100.0);
+        }
+    }
+
+    #[test]
+    fn test_multiple_gpu_collections() {
+        // Collect GPU data multiple times - should not crash or leak
+        for _ in 0..10 {
+            let gpu_data = collect_gpu_data();
+            assert!(gpu_data.usage >= 0.0);
+        }
+    }
+
+    #[test]
+    fn test_gpu_data_memory_consistency() {
+        let gpu_data = collect_gpu_data();
+        
+        // Memory used should never exceed memory total
+        assert!(gpu_data.memory_used <= gpu_data.memory_total);
+        
+        // If no GPU, both should be 0
+        if !gpu_data.available {
+            assert_eq!(gpu_data.memory_used, 0);
+            assert_eq!(gpu_data.memory_total, 0);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_nvidia_driver_check_caching() {
+        // First call
+        let result1 = check_nvidia_driver_present();
+        
+        // Second call should return cached result
+        let result2 = check_nvidia_driver_present();
+        
+        // Results should be consistent
+        assert_eq!(result1, result2);
+    }
+
+    #[test]
+    fn test_gpu_optional_fields() {
+        let gpu_data = collect_gpu_data();
+        
+        // Optional fields should be None if GPU is not available
+        if !gpu_data.available {
+            assert!(gpu_data.temperature.is_none());
+            assert!(gpu_data.fan_speed.is_none());
+            assert!(gpu_data.power_draw.is_none());
+        }
+        
+        // If temperature is present, it should be reasonable
+        if let Some(temp) = gpu_data.temperature {
+            assert!(temp >= 0.0 && temp <= 150.0); // Reasonable GPU temp range
+        }
+        
+        // If fan speed is present, it should be 0-100%
+        if let Some(fan) = gpu_data.fan_speed {
+            assert!(fan <= 100);
+        }
+        
+        // If power draw is present, it should be positive
+        if let Some(power) = gpu_data.power_draw {
+            assert!(power >= 0.0);
+        }
+    }
+}

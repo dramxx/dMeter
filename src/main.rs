@@ -625,6 +625,139 @@ fn render_gpu_history(f: &mut Frame, area: Rect, history: &[f32]) {
     );
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_creation() {
+        // App should be created without panicking
+        let cli = CliArgs { interval: 2 };
+        let app = App::new(cli);
+        
+        // Verify app was created successfully
+        assert_eq!(app.interval, 2);
+        assert!(app.gol.is_none());
+        
+        // History buffers may or may not be empty depending on initialization
+        // The important thing is the app doesn't crash
+    }
+
+    #[test]
+    fn test_app_update_no_crash() {
+        let cli = CliArgs { interval: 2 };
+        let mut app = App::new(cli);
+        
+        // Update should not crash even without GPU
+        app.update();
+        
+        // Verify data was collected
+        assert!(app.data.cpu.usage >= 0.0);
+        assert!(app.data.memory.total > 0);
+    }
+
+    #[test]
+    fn test_app_update_multiple_times() {
+        let cli = CliArgs { interval: 2 };
+        let mut app = App::new(cli);
+        
+        // Update multiple times - should not leak memory or crash
+        for _ in 0..10 {
+            app.update();
+            assert!(app.data.cpu.usage >= 0.0);
+        }
+    }
+
+    #[test]
+    fn test_app_with_no_gpu() {
+        let cli = CliArgs { interval: 2 };
+        let mut app = App::new(cli);
+        app.update();
+        
+        // If no GPU, should have default values
+        if !app.data.gpu.available {
+            assert_eq!(app.data.gpu.usage, 0.0);
+            assert_eq!(app.data.gpu.memory_used, 0);
+            assert_eq!(app.data.gpu.memory_total, 0);
+            
+            // GPU history should still work (just with zeros)
+            assert!(app.gpu_history.get().is_empty() || app.gpu_history.get()[0] == 0.0);
+        }
+    }
+
+    #[test]
+    fn test_app_history_buffers() {
+        let cli = CliArgs { interval: 2 };
+        let mut app = App::new(cli);
+        
+        // Update to populate history
+        app.update();
+        
+        // History buffers should have data
+        assert!(!app.cpu_history.get().is_empty());
+        assert!(!app.ram_history.get().is_empty());
+        
+        // Values should be within valid ranges
+        for &cpu_val in app.cpu_history.get() {
+            assert!(cpu_val >= 0.0 && cpu_val <= 100.0);
+        }
+    }
+
+    #[test]
+    fn test_app_cleanup() {
+        // Create and drop app multiple times
+        for _ in 0..5 {
+            let cli = CliArgs { interval: 2 };
+            let mut app = App::new(cli);
+            app.update();
+            drop(app);
+        }
+        
+        // If we get here, cleanup is working properly
+    }
+
+    #[test]
+    fn test_has_gpu_function() {
+        let cli = CliArgs { interval: 2 };
+        let mut app = App::new(cli);
+        app.update();
+        
+        let has_gpu_result = has_gpu(&app);
+        
+        // Should match the GPU available flag
+        assert_eq!(has_gpu_result, app.data.gpu.available);
+    }
+
+    #[test]
+    fn test_app_data_consistency() {
+        let cli = CliArgs { interval: 2 };
+        let mut app = App::new(cli);
+        app.update();
+        
+        // CPU usage should be valid
+        assert!(app.data.cpu.usage >= 0.0 && app.data.cpu.usage <= 100.0);
+        
+        // Memory should be consistent
+        assert!(app.data.memory.used <= app.data.memory.total);
+        
+        // GPU memory should be consistent
+        assert!(app.data.gpu.memory_used <= app.data.gpu.memory_total);
+        
+        // Network speeds should be non-negative
+        assert!(app.data.network.upload_speed >= 0.0);
+        assert!(app.data.network.download_speed >= 0.0);
+    }
+
+    #[test]
+    fn test_app_game_of_life_initialization() {
+        let cli = CliArgs { interval: 2 };
+        let app = App::new(cli);
+        
+        // Game of Life should be None initially
+        assert!(app.gol.is_none());
+    }
+}
+
 fn render_vram_history(f: &mut Frame, area: Rect, history: &[f32]) {
     use ratatui::widgets::{Block, Borders};
 

@@ -1,7 +1,8 @@
 use crate::state::{CpuData, DiskData, MemoryData, NetworkData, SystemData, SystemInfoData};
 use std::sync::mpsc::{self, Receiver};
-use std::sync::Mutex;
-use std::thread;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::{self, JoinHandle};
 use sysinfo::{Disks, Networks, System};
 
 pub struct SystemCollector {
@@ -14,6 +15,20 @@ pub struct SystemCollector {
     last_disk_write: Mutex<u64>,
     memory_receiver: Receiver<(u64, u64, u64)>, // (commit_total, commit_used, cached)
     cached_memory_info: Mutex<(u64, u64, u64)>,
+    memory_thread_handle: Option<JoinHandle<()>>,
+    shutdown_signal: Arc<AtomicBool>,
+}
+
+impl Drop for SystemCollector {
+    fn drop(&mut self) {
+        // Signal the background thread to shutdown
+        self.shutdown_signal.store(true, Ordering::Relaxed);
+        
+        // Wait for the thread to finish (with timeout)
+        if let Some(handle) = self.memory_thread_handle.take() {
+            let _ = handle.join();
+        }
+    }
 }
 
 impl SystemCollector {
@@ -25,15 +40,30 @@ impl SystemCollector {
         let (tx, rx) = Self::get_network_totals(&networks);
         let (read, write) = Self::get_disk_totals(&disks);
 
-        // Create background thread for memory collection
+        // Create background thread for memory collection with shutdown signal
         let (memory_tx, memory_rx) = mpsc::channel();
-        thread::spawn(move || {
+        let shutdown_signal = Arc::new(AtomicBool::new(false));
+        let shutdown_clone = Arc::clone(&shutdown_signal);
+        
+        let memory_thread_handle = thread::spawn(move || {
             loop {
+                // Check shutdown signal
+                if shutdown_clone.load(Ordering::Relaxed) {
+                    break;
+                }
+                
                 let memory_info = crate::collectors::memory_info::collect_extended_memory_info();
                 if memory_tx.send(memory_info).is_err() {
                     break; // Channel closed, exit thread
                 }
-                std::thread::sleep(std::time::Duration::from_secs(10));
+                
+                // Sleep in small increments to check shutdown signal more frequently
+                for _ in 0..100 {
+                    if shutdown_clone.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
             }
         });
 
@@ -47,6 +77,8 @@ impl SystemCollector {
             last_disk_write: Mutex::new(write),
             memory_receiver: memory_rx,
             cached_memory_info: Mutex::new((0, 0, 0)),
+            memory_thread_handle: Some(memory_thread_handle),
+            shutdown_signal,
         }
     }
 
@@ -417,5 +449,116 @@ fn get_local_ip() -> Result<String, std::io::Error> {
             Ok(ip.to_string())
         }
         Err(e) => Err(e),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn test_system_collector_drop_cleanup() {
+        // Create a SystemCollector
+        let collector = SystemCollector::new();
+        
+        // Verify shutdown signal is initially false
+        assert!(!collector.shutdown_signal.load(Ordering::Relaxed));
+        
+        // Drop the collector
+        drop(collector);
+        
+        // Thread should have been signaled to shutdown and joined
+        // If this test completes without hanging, the cleanup works
+    }
+
+    #[test]
+    fn test_system_collector_thread_shutdown() {
+        let collector = SystemCollector::new();
+        let shutdown_clone = Arc::clone(&collector.shutdown_signal);
+        
+        // Verify thread is running (shutdown signal is false)
+        assert!(!shutdown_clone.load(Ordering::Relaxed));
+        
+        // Drop collector to trigger cleanup
+        drop(collector);
+        
+        // Give a moment for cleanup to complete
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        
+        // Shutdown signal should have been set
+        assert!(shutdown_clone.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn test_system_collector_collect_data() {
+        let mut collector = SystemCollector::new();
+        
+        // Collect data - should not panic
+        let data = collector.collect(true);
+        
+        // Verify we got valid data
+        assert!(data.cpu.usage >= 0.0 && data.cpu.usage <= 100.0);
+        assert!(data.memory.total > 0);
+        assert!(data.cpu.frequency >= 0.0);
+        
+        // Cleanup
+        drop(collector);
+    }
+
+    #[test]
+    fn test_system_collector_multiple_collections() {
+        let mut collector = SystemCollector::new();
+        
+        // Collect data multiple times - should not leak memory
+        for _ in 0..10 {
+            let data = collector.collect(true);
+            assert!(data.cpu.usage >= 0.0);
+        }
+        
+        // Cleanup
+        drop(collector);
+    }
+
+    #[test]
+    fn test_system_collector_with_swap() {
+        let mut collector = SystemCollector::new();
+        
+        // Test with swap enabled
+        let data_with_swap = collector.collect(true);
+        assert!(data_with_swap.memory.total > 0);
+        
+        // Test with swap disabled
+        let data_without_swap = collector.collect(false);
+        assert!(data_without_swap.memory.total > 0);
+        
+        drop(collector);
+    }
+
+    #[test]
+    fn test_memory_receiver_channel() {
+        let mut collector = SystemCollector::new();
+        
+        // Wait a bit for background thread to send data
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        
+        // Collect should work even if channel has data
+        let data = collector.collect(true);
+        assert!(data.memory.total > 0);
+        
+        drop(collector);
+    }
+
+    #[test]
+    fn test_no_thread_leak_on_drop() {
+        // Create and drop multiple collectors to ensure no thread leak
+        for _ in 0..5 {
+            let mut collector = SystemCollector::new();
+            let _data = collector.collect(true);
+            drop(collector);
+        }
+        
+        // If we get here without hanging, threads are being cleaned up properly
     }
 }

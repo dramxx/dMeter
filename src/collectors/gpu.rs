@@ -1,8 +1,29 @@
 use crate::state::GpuData;
 
+#[cfg(windows)]
+use std::sync::OnceLock;
+
+#[cfg(windows)]
+static NVIDIA_DRIVER_CHECKED: OnceLock<bool> = OnceLock::new();
+
 pub fn collect_gpu_data() -> GpuData {
     #[cfg(windows)]
     {
+        // Quick check if NVIDIA driver might be present before attempting NVML init
+        let driver_present = check_nvidia_driver_present();
+        if !driver_present {
+            return GpuData {
+                available: false,
+                name: "No NVIDIA GPU".to_string(),
+                usage: 0.0,
+                memory_used: 0,
+                memory_total: 0,
+                temperature: None,
+                fan_speed: None,
+                power_draw: None,
+            };
+        }
+
         match try_nvidia() {
             Ok(gpu) => return gpu,
             Err(e) => {
@@ -11,6 +32,10 @@ pub fn collect_gpu_data() -> GpuData {
         }
     }
 
+    default_gpu_data()
+}
+
+fn default_gpu_data() -> GpuData {
     GpuData {
         available: false,
         name: "No GPU / Not detected".to_string(),
@@ -21,6 +46,18 @@ pub fn collect_gpu_data() -> GpuData {
         fan_speed: None,
         power_draw: None,
     }
+}
+
+#[cfg(windows)]
+fn check_nvidia_driver_present() -> bool {
+    *NVIDIA_DRIVER_CHECKED.get_or_init(|| {
+        let possible_paths = [
+            std::path::Path::new(r"C:\Windows\System32\nvml.dll"),
+            std::path::Path::new(r"C:\Windows\SysWOW64\nvml.dll"),
+        ];
+
+        possible_paths.iter().any(|p| p.exists())
+    })
 }
 
 #[cfg(windows)]

@@ -25,8 +25,6 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData) {
         return;
     }
 
-    let bar_width = ((inner.width as usize).saturating_sub(8).max(10) * 7) / 10;
-
     let mut y = inner.y;
 
     if !data.available {
@@ -38,7 +36,6 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData) {
         return;
     }
 
-    let gpu_bar = render_bar(data.usage, bar_width);
     let gpu_color = get_usage_color(data.usage);
 
     f.render_widget(
@@ -47,6 +44,12 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData) {
         Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
+
+    // Calculate GPU bar width dynamically based on text content
+    let gpu_text_content = format!("GPU  [] {:.1}%", data.usage);
+    let gpu_text_width = gpu_text_content.len() + 2;
+    let gpu_bar_width = (inner.width as usize).saturating_sub(gpu_text_width).max(10);
+    let gpu_bar = render_bar(data.usage, gpu_bar_width);
 
     f.render_widget(
         Paragraph::new(Span::raw(format!("GPU  [{}] {:.1}%", gpu_bar, data.usage)))
@@ -60,9 +63,14 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData) {
     } else {
         0.0
     };
-    let mem_bar = render_bar(mem_percent, bar_width);
     let mem_used = format_bytes(data.memory_used);
     let mem_total = format_bytes(data.memory_total);
+    
+    // Calculate VRAM bar width dynamically based on text content
+    let vram_text_content = format!("VRAM [] {} / {}", mem_used, mem_total);
+    let vram_text_width = vram_text_content.len() + 2;
+    let vram_bar_width = (inner.width as usize).saturating_sub(vram_text_width).max(10);
+    let mem_bar = render_bar(mem_percent, vram_bar_width);
 
     f.render_widget(
         Paragraph::new(Span::raw(format!(

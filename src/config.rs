@@ -54,3 +54,68 @@ impl Config {
         self.interval = cli.interval;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cli_args_defaults() {
+        let args = CliArgs { interval: 2 };
+        assert_eq!(args.interval, 2);
+    }
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+        assert_eq!(config.interval, 2);
+        assert!(config.show_swap);
+    }
+
+    #[test]
+    fn test_config_merge_cli() {
+        let mut config = Config::default();
+        let cli = CliArgs { interval: 5 };
+        
+        config.merge_cli(&cli);
+        
+        assert_eq!(config.interval, 5);
+        assert!(config.show_swap);
+    }
+
+    #[test]
+    fn test_config_from_toml() {
+        let toml_str = r#"
+interval = 3
+show_swap = false
+"#;
+        
+        let config: Config = toml::from_str(toml_str).unwrap();
+        
+        assert_eq!(config.interval, 3);
+        assert!(!config.show_swap);
+    }
+
+    #[test]
+    fn test_config_partial_toml() {
+        let partial_toml = r#"
+interval = 4
+show_swap = true
+"#;
+        
+        let config: Config = toml::from_str(partial_toml).unwrap();
+        
+        assert_eq!(config.interval, 4);
+        assert!(config.show_swap);
+    }
+
+    #[test]
+    fn test_config_invalid_interval() {
+        let invalid_toml = r#"
+interval = -1
+"#;
+        
+        let result: Result<Config, _> = toml::from_str(invalid_toml);
+        assert!(result.is_err());
+    }
+}

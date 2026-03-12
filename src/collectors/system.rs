@@ -197,8 +197,8 @@ impl SystemCollector {
 
         let core_usage: Vec<f32> = cpus.iter().map(|c| c.cpu_usage()).collect();
 
-        let physical_cores = sys.physical_core_count().unwrap_or(1);
-        let logical_cores = cpus.len();
+        let _physical_cores = sys.physical_core_count().unwrap_or(0);
+        let _logical_cores = sys.cpus().len();
 
         // Try to get CPU temperature, fan speed, and power draw
         let temperature = get_cpu_temperature().or(Some(45.0)); // Test fallback
@@ -209,11 +209,9 @@ impl SystemCollector {
             usage,
             core_usage,
             temperature,
-            frequency,
-            physical_cores,
-            logical_cores,
+            frequency: frequency as f32,
             fan_speed,
-            power_draw,
+            power_draw: power_draw.map(|p| p as f32),
         }
     }
 
@@ -278,10 +276,11 @@ impl SystemCollector {
         }
 
         NetworkData {
-            adapter_name,
+            adapter_name: adapter_name.clone(),
             ip_address,
-            upload_speed,
-            download_speed,
+            upload_speed: upload_speed as f64,
+            download_speed: download_speed as f64,
+            interface: adapter_name,
         }
     }
 
@@ -305,8 +304,8 @@ impl SystemCollector {
         *last_write = total_write;
 
         crate::state::DiskIOData {
-            read_speed,
-            write_speed,
+            read_speed: read_speed as f64,
+            write_speed: write_speed as f64,
         }
     }
 

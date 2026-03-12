@@ -92,7 +92,7 @@ fn try_nvidia() -> Result<GpuData, String> {
 
     let fan_speed = device.fan_speed(0).ok();
 
-    let power_draw = device.power_usage().ok().map(|p| p / 1000);
+    let power_draw = device.power_usage().ok().map(|p| (p / 1000) as f32);
 
     Ok(GpuData {
         available: true,

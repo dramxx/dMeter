@@ -1,7 +1,7 @@
 use std::io;
 use std::panic;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::time::Duration;
 
 use ratatui::crossterm::{
@@ -27,8 +27,12 @@ mod ui;
 mod utils;
 
 struct App {
-    collector: SystemCollector,
     data: SystemData,
+    data_receiver: mpsc::Receiver<SystemData>,
+    show_processes_flag: Arc<AtomicBool>,
+    force_refresh_flag: Arc<AtomicBool>,
+    collector_shutdown: Arc<AtomicBool>,
+    collector_thread: Option<std::thread::JoinHandle<()>>,
     cpu_history: HistoryBuffer,
     gpu_history: HistoryBuffer,
     ram_history: HistoryBuffer,
@@ -43,16 +47,68 @@ struct App {
     gol_tick: std::time::Instant,
 }
 
+impl Drop for App {
+    fn drop(&mut self) {
+        self.collector_shutdown.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.collector_thread.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
 impl App {
     fn new(cli: CliArgs) -> Self {
         let mut config = crate::config::Config::load();
         config.merge_cli(&cli);
+        let interval = config.interval;
 
-        let collector = SystemCollector::new();
+        let mut collector = SystemCollector::new();
+
+        // Initial synchronous collection so we have data immediately
+        let initial_data = collector.collect(true);
+
+        // Spawn background collection thread — ALL collection happens off the main thread
+        let (tx, rx) = mpsc::channel();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let shutdown_clone = Arc::clone(&shutdown);
+        let show_procs = Arc::new(AtomicBool::new(false));
+        let show_procs_clone = Arc::clone(&show_procs);
+        let force_refresh = Arc::new(AtomicBool::new(false));
+        let force_refresh_clone = Arc::clone(&force_refresh);
+
+        let collector_thread = std::thread::spawn(move || {
+            loop {
+                // Sleep first (initial data already collected synchronously)
+                for _ in 0..(interval * 10) {
+                    if shutdown_clone.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    if force_refresh_clone.load(Ordering::Relaxed) {
+                        force_refresh_clone.store(false, Ordering::Relaxed);
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+
+                if shutdown_clone.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                let collect_procs = show_procs_clone.load(Ordering::Relaxed);
+                let data = collector.collect(collect_procs);
+                if tx.send(data).is_err() {
+                    break;
+                }
+            }
+        });
 
         Self {
-            collector,
-            data: SystemData::default(),
+            data: initial_data,
+            data_receiver: rx,
+            show_processes_flag: show_procs,
+            force_refresh_flag: force_refresh,
+            collector_shutdown: shutdown,
+            collector_thread: Some(collector_thread),
             cpu_history: HistoryBuffer::new(60),
             gpu_history: HistoryBuffer::new(60),
             ram_history: HistoryBuffer::new(60),
@@ -63,16 +119,22 @@ impl App {
             disk_write_history: HistoryBuffer::new(60),
             gol: None,
             show_processes: false,
-            interval: config.interval,
+            interval,
             gol_tick: std::time::Instant::now(),
         }
     }
 
     fn update(&mut self) {
-        self.data = self.collector.collect(self.show_processes);
+        // Sync the show_processes flag to the background thread
+        self.show_processes_flag.store(self.show_processes, Ordering::Relaxed);
+
+        // Non-blocking: read latest data from background thread
+        while let Ok(data) = self.data_receiver.try_recv() {
+            self.data = data;
+        }
+
         self.cpu_history.push(self.data.cpu.usage);
 
-        // RAM usage percentage
         let ram_usage = if self.data.memory.total > 0 {
             (self.data.memory.used as f32 / self.data.memory.total as f32) * 100.0
         } else {
@@ -83,7 +145,6 @@ impl App {
         if self.data.gpu.available {
             self.gpu_history.push(self.data.gpu.usage);
 
-            // VRAM usage percentage
             let vram_usage = if self.data.gpu.memory_total > 0 {
                 (self.data.gpu.memory_used as f32 / self.data.gpu.memory_total as f32) * 100.0
             } else {
@@ -92,13 +153,11 @@ impl App {
             self.vram_history.push(vram_usage);
         }
 
-        // Network history (already in bytes/s, convert to KB/s for better scaling)
         self.network_rx_history
             .push(self.data.network.download_speed as f32 / 1024.0);
         self.network_tx_history
             .push(self.data.network.upload_speed as f32 / 1024.0);
 
-        // Disk I/O history (already in bytes/s, convert to MB/s for better scaling)
         self.disk_read_history
             .push(self.data.disk_io.read_speed as f32 / 1024.0 / 1024.0);
         self.disk_write_history
@@ -166,13 +225,7 @@ fn main_inner() -> io::Result<()> {
                             running.store(false, Ordering::SeqCst);
                         }
                         KeyCode::Char('r') => {
-                            if let Err(e) =
-                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                    app.update();
-                                }))
-                            {
-                                eprintln!("Error during refresh: {:?}", e);
-                            }
+                            app.force_refresh_flag.store(true, Ordering::Relaxed);
                         }
                         KeyCode::Char('c') => {
                             if key
@@ -184,6 +237,7 @@ fn main_inner() -> io::Result<()> {
                         }
                         KeyCode::Char(' ') => {
                             app.show_processes = !app.show_processes;
+                            app.show_processes_flag.store(app.show_processes, Ordering::Relaxed);
                         }
                         KeyCode::Char('g') => {
                             // Force restart Game of Life

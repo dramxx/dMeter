@@ -447,19 +447,16 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
         let cpu_history_area = Rect::new(area.x, history_y, col_width, history_height);
         let ram_history_area = Rect::new(area.x + col_width, history_y, col_width, history_height);
 
-        // Network and Disk row (2 columns)
+        // Network, Disk, and Disk I/O row (3 columns)
         let network_y = history_y + history_height;
-        let net_area = Rect::new(area.x, network_y, col_width, network_height);
-        let disk_area = Rect::new(area.x + col_width, network_y, col_width, network_height);
-
-        // Disk I/O (full width)
-        let disk_io_y = network_y + network_height;
-        let disk_io_height = 4u16;
-        let disk_io_area = Rect::new(area.x, disk_io_y, area.width, disk_io_height);
+        let col3_width = area.width / 3;
+        let net_area = Rect::new(area.x, network_y, col3_width, network_height);
+        let disk_area = Rect::new(area.x + col3_width, network_y, col3_width, network_height);
+        let disk_io_area = Rect::new(area.x + (col3_width * 2), network_y, area.width - (col3_width * 2), network_height);
 
         // Game of Life (expands to fill all remaining space)
-        let gol_y = disk_io_y + disk_io_height + 1;
-        let gol_height = area.height.saturating_sub(panel_height + history_height + network_height + disk_io_height + 1);
+        let gol_y = network_y + network_height + 1;
+        let gol_height = area.height.saturating_sub(panel_height + history_height + network_height + 1);
         let gol_area = Rect::new(area.x, gol_y, area.width, gol_height);
 
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Standard, app.cpu_history.get());

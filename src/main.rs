@@ -427,13 +427,12 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
         let disk_area = Rect::new(area.x + col_width, network_y, col_width, bottom_height);
 
         let disk_io_y = network_y + bottom_height;
-        let gol_height = 5u16;
-        let disk_io_height = gol_height;
+        let disk_io_height = 3u16;
         let disk_io_area = Rect::new(area.x, disk_io_y, area.width, disk_io_height);
 
         let gol_y = disk_io_y + disk_io_height;
-        let gol_area_height = area.height.saturating_sub(panel_height + history_height + bottom_height + disk_io_height);
-        let gol_area = Rect::new(area.x, gol_y, area.width, gol_area_height);
+        let gol_height = area.height.saturating_sub(panel_height + history_height + bottom_height + disk_io_height);
+        let gol_area = Rect::new(area.x, gol_y, area.width, gol_height);
 
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Compact, app.cpu_history.get());
         render_memory(f, mem_area, &app.data.memory, true);

@@ -18,7 +18,7 @@ pub fn render_processes(f: &mut Frame, area: Rect, processes: &[ProcessData]) {
     // Create inner area with padding (2 chars on all sides, same as Game of Life)
     let inner_area = area.inner(Margin::new(2, 2));
     
-    if inner_area.width < 60 || inner_area.height < 2 {
+    if inner_area.width < 30 || inner_area.height < 2 {
         return; // Not enough space to render
     }
 

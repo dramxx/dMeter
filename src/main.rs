@@ -69,7 +69,7 @@ impl App {
     }
 
     fn update(&mut self) {
-        self.data = self.collector.collect();
+        self.data = self.collector.collect(self.show_processes);
         self.cpu_history.push(self.data.cpu.usage);
 
         // RAM usage percentage
@@ -152,9 +152,11 @@ fn main_inner() -> io::Result<()> {
     }
 
     let mut tick_timer = std::time::Instant::now();
+    let mut last_render = std::time::Instant::now();
+    let frame_duration = Duration::from_millis(50); // 20 FPS limit
 
     while running.load(Ordering::SeqCst) {
-        let timeout = Duration::from_millis(100);
+        let timeout = Duration::from_millis(16); // ~60Hz polling
 
         if poll(timeout)? {
             if let Ok(Event::Key(key)) = crossterm::event::read() {
@@ -209,13 +211,17 @@ fn main_inner() -> io::Result<()> {
             app.gol_tick = std::time::Instant::now();
         }
 
-        let size = terminal.size()?;
-        let mode = get_display_mode(size.height);
+        // Frame rate limiting: only render at 20 FPS
+        if last_render.elapsed() >= frame_duration {
+            let size = terminal.size()?;
+            let mode = get_display_mode(size.height);
 
-        if size.width >= 80 && size.height >= 24 {
-            terminal.draw(|f| {
-                render_ui(f, &mut app, mode);
-            })?;
+            if size.width >= 80 && size.height >= 24 {
+                terminal.draw(|f| {
+                    render_ui(f, &mut app, mode);
+                })?;
+            }
+            last_render = std::time::Instant::now();
         }
     }
 
@@ -815,10 +821,16 @@ mod tests {
     fn test_app_process_data_collection() {
         let cli = CliArgs { interval: 2 };
         let mut app = App::new(cli);
+        
+        // Enable process widget to trigger process collection
+        app.show_processes = true;
         app.update();
         
         // Should have collected process data
         assert!(!app.data.processes.is_empty());
+        
+        // Should be limited to 100 processes
+        assert!(app.data.processes.len() <= 100);
         
         // Processes should be sorted by combined resource usage
         if app.data.processes.len() > 1 {
@@ -832,6 +844,9 @@ mod tests {
     fn test_app_process_data_validity() {
         let cli = CliArgs { interval: 2 };
         let mut app = App::new(cli);
+        
+        // Enable process widget to trigger process collection
+        app.show_processes = true;
         app.update();
         
         // Check that process data is valid

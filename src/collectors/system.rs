@@ -172,13 +172,19 @@ impl SystemCollector {
         }
     }
 
-    pub fn collect(&mut self) -> SystemData {
+    pub fn collect(&mut self, collect_processes: bool) -> SystemData {
         {
             let mut sys = self.sys.lock().unwrap_or_else(|e| {
                 log::error!("System mutex poisoned, recovering: {}", e);
                 e.into_inner()
             });
-            sys.refresh_all();
+            // Use targeted refresh instead of refresh_all() for better performance
+            sys.refresh_cpu_all();
+            sys.refresh_memory();
+            // Only refresh processes if we need them
+            if collect_processes {
+                sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+            }
         }
 
         {
@@ -203,7 +209,11 @@ impl SystemCollector {
         let disks = self.collect_disks();
         let disk_io = self.collect_disk_io();
         let system = self.collect_system();
-        let processes = self.collect_processes();
+        let processes = if collect_processes {
+            self.collect_processes()
+        } else {
+            Vec::new()
+        };
 
         SystemData {
             cpu,
@@ -411,6 +421,9 @@ impl SystemCollector {
             score_b.partial_cmp(&score_a).unwrap_or(std::cmp::Ordering::Equal)
         });
 
+        // Limit to top 100 processes for performance
+        processes.truncate(100);
+
         processes
     }
 }
@@ -532,7 +545,7 @@ mod tests {
         let mut collector = SystemCollector::new();
         
         // Should not panic
-        let data = collector.collect();
+        let data = collector.collect(false);
         
         // Verify we got valid data
         assert!(data.cpu.usage >= 0.0 && data.cpu.usage <= 100.0);
@@ -549,7 +562,7 @@ mod tests {
         
         // Collect multiple times - should not crash or leak
         for _ in 0..5 {
-            let data = collector.collect();
+            let data = collector.collect(false);
             assert!(data.cpu.usage >= 0.0);
         }
     }
@@ -559,7 +572,7 @@ mod tests {
         let mut collector = SystemCollector::new();
         
         // Collect data (swap is always shown now)
-        let data = collector.collect();
+        let data = collector.collect(false);
         
         // Should return valid data with swap info
         assert!(data.memory.total > 0);
@@ -571,7 +584,7 @@ mod tests {
         let mut collector = SystemCollector::new();
         
         // Collect data
-        let data = collector.collect();
+        let data = collector.collect(false);
         
         // Should have memory data
         assert!(data.memory.total > 0);
@@ -582,10 +595,32 @@ mod tests {
         // Create and drop multiple collectors
         for _ in 0..5 {
             let mut collector = SystemCollector::new();
-            let _data = collector.collect();
+            let _data = collector.collect(false);
             drop(collector);
         }
         
         // If we get here, no thread leak
+    }
+
+    #[test]
+    fn test_process_collection_limit() {
+        let mut collector = SystemCollector::new();
+        
+        // Collect with processes enabled
+        let data = collector.collect(true);
+        
+        // Should have processes, but limited to 100
+        assert!(data.processes.len() <= 100);
+    }
+
+    #[test]
+    fn test_skip_process_collection() {
+        let mut collector = SystemCollector::new();
+        
+        // Collect without processes
+        let data = collector.collect(false);
+        
+        // Should have no processes
+        assert!(data.processes.is_empty());
     }
 }

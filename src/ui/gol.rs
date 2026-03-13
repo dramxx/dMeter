@@ -9,6 +9,8 @@ pub struct GameOfLife {
     pub generation: u32,
     is_dead: bool,
     death_time: Option<Instant>,
+    #[cfg(debug_assertions)]
+    cells_processed_last_step: usize,
 }
 
 impl GameOfLife {
@@ -20,6 +22,8 @@ impl GameOfLife {
             generation: 0,
             is_dead: false,
             death_time: None,
+            #[cfg(debug_assertions)]
+            cells_processed_last_step: 0,
         };
         gol.randomize();
         gol
@@ -52,13 +56,68 @@ impl GameOfLife {
 
         let mut new_cells = HashSet::new();
 
-        for y in 0..self.height {
-            for x in 0..self.width {
+        // OPTIMIZATION: Only process cells near alive cells
+        // This dramatically reduces work when few cells are alive
+        let total_cells = self.width * self.height;
+        if self.cells.len() < total_cells as usize / 10 {
+            // Sparse optimization: only check neighbors of alive cells and their neighbors
+            let mut cells_to_check = HashSet::new();
+            
+            for &(x, y) in &self.cells {
+                for dy in -1i32..=1 {
+                    for dx in -1i32..=1 {
+                        let nx = x as i32 + dx;
+                        let ny = y as i32 + dy;
+                        if nx >= 0 && nx < self.width as i32 && ny >= 0 && ny < self.height as i32 {
+                            cells_to_check.insert((nx as u32, ny as u32));
+                        }
+                    }
+                }
+            }
+            
+            #[cfg(debug_assertions)]
+            let cells_checked = cells_to_check.len();
+            
+            for (x, y) in cells_to_check {
                 let neighbors = self.count_neighbors(x, y);
                 let alive = self.cells.contains(&(x, y));
 
                 if neighbors == 3 || (alive && neighbors == 2) {
                     new_cells.insert((x, y));
+                }
+            }
+            
+            #[cfg(debug_assertions)]
+            {
+                self.cells_processed_last_step = cells_checked;
+                if self.generation % 25 == 0 {  // Log every 5 seconds
+                    let total_cells = self.width * self.height;
+                    let efficiency = (total_cells as usize - cells_checked) * 100 / total_cells as usize;
+                    log::debug!("GoL optimization: processed {} of {} cells ({}% saved)", 
+                        cells_checked, total_cells, efficiency);
+                }
+            }
+        } else {
+            // Dense optimization: use original algorithm when many cells are alive
+            #[cfg(debug_assertions)]
+            let total_cells = self.width * self.height;
+            
+            for y in 0..self.height {
+                for x in 0..self.width {
+                    let neighbors = self.count_neighbors(x, y);
+                    let alive = self.cells.contains(&(x, y));
+
+                    if neighbors == 3 || (alive && neighbors == 2) {
+                        new_cells.insert((x, y));
+                    }
+                }
+            }
+            
+            #[cfg(debug_assertions)]
+            {
+                self.cells_processed_last_step = total_cells as usize;
+                if self.generation % 25 == 0 {  // Log every 5 seconds
+                    log::debug!("GoL dense mode: processed all {} cells", total_cells);
                 }
             }
         }

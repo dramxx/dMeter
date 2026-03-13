@@ -59,6 +59,7 @@ dmeter --interval 5       # Custom refresh interval (seconds)
 
 - `q` or `Ctrl+C` - Quit
 - `r` - Force refresh
+- `g` - Restart Game of Life
 - `Space` - Toggle between Game of Life and Process Viewer
 
 ## Configuration

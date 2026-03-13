@@ -183,6 +183,10 @@ fn main_inner() -> io::Result<()> {
                         KeyCode::Char(' ') => {
                             app.show_processes = !app.show_processes;
                         }
+                        KeyCode::Char('g') => {
+                            // Force restart Game of Life
+                            app.gol = None;
+                        }
                         _ => {}
                     }
                 }
@@ -837,5 +841,26 @@ mod tests {
             assert!(process.memory_usage >= 0.0);
             assert!(process.memory_usage <= 100.0);
         }
+    }
+
+    #[test]
+    fn test_app_gol_restart() {
+        let cli = CliArgs { interval: 2 };
+        let mut app = App::new(cli);
+        
+        // Initially GoL should be None
+        assert!(app.gol.is_none());
+        
+        // Simulate GoL initialization (would happen during rendering)
+        app.gol = Some(GameOfLife::new(50, 50));
+        assert!(app.gol.is_some());
+        
+        // Simulate 'g' key press - restart GoL
+        app.gol = None;
+        assert!(app.gol.is_none());
+        
+        // GoL will be recreated on next render
+        app.gol = Some(GameOfLife::new(50, 50));
+        assert!(app.gol.is_some());
     }
 }

@@ -435,28 +435,31 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
 
         render_bottom_widget(f, gol_area, app);
     } else {
-        // No GPU: 2-column layout with expanded Game of Life
+        // No GPU: optimized layout with full-width rows
         let col_width = area.width / 2;
 
-        // Top row: CPU and Memory (2 columns)
+        // Row 1: CPU and Memory (2 columns)
         let cpu_area = Rect::new(area.x, area.y, col_width, panel_height);
-        let mem_area = Rect::new(area.x + col_width, area.y, col_width, panel_height);
+        let mem_area = Rect::new(area.x + col_width, area.y, area.width - col_width, panel_height);
 
-        // History row: CPU and RAM side by side
+        // Row 2: CPU History and RAM History (2 columns)
         let history_y = area.y + panel_height;
         let cpu_history_area = Rect::new(area.x, history_y, col_width, history_height);
-        let ram_history_area = Rect::new(area.x + col_width, history_y, col_width, history_height);
+        let ram_history_area = Rect::new(area.x + col_width, history_y, area.width - col_width, history_height);
 
-        // Network, Disk, and Disk I/O row (3 columns)
+        // Row 3: Network (full width)
         let network_y = history_y + history_height;
-        let col3_width = area.width / 3;
-        let net_area = Rect::new(area.x, network_y, col3_width, network_height);
-        let disk_area = Rect::new(area.x + col3_width, network_y, col3_width, network_height);
-        let disk_io_area = Rect::new(area.x + (col3_width * 2), network_y, area.width - (col3_width * 2), network_height);
+        let net_area = Rect::new(area.x, network_y, area.width, network_height);
+
+        // Row 4: Disk and Disk I/O (2 columns)
+        let disk_y = network_y + network_height;
+        let disk_height = 4u16;
+        let disk_area = Rect::new(area.x, disk_y, col_width, disk_height);
+        let disk_io_area = Rect::new(area.x + col_width, disk_y, area.width - col_width, disk_height);
 
         // Game of Life (expands to fill all remaining space)
-        let gol_y = network_y + network_height + 1;
-        let gol_height = area.height.saturating_sub(panel_height + history_height + network_height + 1);
+        let gol_y = disk_y + disk_height + 1;
+        let gol_height = area.height.saturating_sub(panel_height + history_height + network_height + disk_height + 1);
         let gol_area = Rect::new(area.x, gol_y, area.width, gol_height);
 
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Standard, app.cpu_history.get());

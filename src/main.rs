@@ -9,6 +9,9 @@ use ratatui::crossterm::{
     execute,
     terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
+
+#[cfg(not(windows))]
+use ratatui::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 use ratatui::{backend::CrosstermBackend, prelude::*, widgets::*, Frame, Terminal};
 
 use crate::collectors::SystemCollector;
@@ -170,6 +173,8 @@ fn main() -> io::Result<()> {
 
     if let Err(e) = result {
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        #[cfg(not(windows))]
+        let _ = disable_raw_mode();
         if let Some(s) = e.downcast_ref::<&str>() {
             eprintln!("\n\nPANIC: {}\n", s);
         } else if let Some(s) = e.downcast_ref::<String>() {
@@ -199,6 +204,9 @@ fn main_inner() -> io::Result<()> {
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
     terminal.hide_cursor()?;
+
+    #[cfg(not(windows))]
+    let _ = enable_raw_mode();
 
     let mut app = App::new(cli);
 
@@ -281,6 +289,9 @@ fn main_inner() -> io::Result<()> {
 
     execute!(io::stdout(), LeaveAlternateScreen,)?;
     terminal.show_cursor()?;
+
+    #[cfg(not(windows))]
+    let _ = disable_raw_mode();
 
     Ok(())
 }

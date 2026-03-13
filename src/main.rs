@@ -298,17 +298,15 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
             panel_height,
         );
 
-        let gap_size = 0;
-        let available_width = area.width - gap_size;
-        let history_widget_width = available_width / 2;
+        let history_widget_width = area.width / 2;
 
         // First history row: CPU and RAM side by side
         let history_y = area.y + panel_height;
         let cpu_history_area = Rect::new(area.x, history_y, history_widget_width, history_height);
         let ram_history_area = Rect::new(
-            area.x + history_widget_width + gap_size,
+            area.x + history_widget_width,
             history_y,
-            history_widget_width,
+            area.width - history_widget_width,
             history_height,
         );
 
@@ -316,9 +314,9 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
         let gpu_history_y = history_y + history_height;
         let gpu_history_area = Rect::new(area.x, gpu_history_y, history_widget_width, history_height);
         let vram_history_area = Rect::new(
-            area.x + history_widget_width + gap_size,
+            area.x + history_widget_width,
             gpu_history_y,
-            history_widget_width,
+            area.width - history_widget_width,
             history_height,
         );
 
@@ -346,10 +344,10 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Compact, app.cpu_history.get());
         render_gpu(f, gpu_area, &app.data.gpu);
         render_memory(f, mem_area, &app.data.memory, true);
-        render_cpu_history(f, cpu_history_area, app.cpu_history.get());
-        render_ram_history(f, ram_history_area, app.ram_history.get());
-        render_gpu_history(f, gpu_history_area, app.gpu_history.get());
-        render_vram_history(f, vram_history_area, app.vram_history.get());
+        render_history(f, cpu_history_area, app.cpu_history.get(), "CPU History", Color::Blue);
+        render_history(f, ram_history_area, app.ram_history.get(), "RAM History", Color::Green);
+        render_history(f, gpu_history_area, app.gpu_history.get(), "GPU History", Color::Cyan);
+        render_history(f, vram_history_area, app.vram_history.get(), "VRAM History", Color::Magenta);
         render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
         render_disk(f, disk_area, &app.data.disks);
         render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
@@ -359,12 +357,12 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
 
         // Top row: CPU and Memory (2 columns)
         let cpu_area = Rect::new(area.x, area.y, col_width, panel_height);
-        let mem_area = Rect::new(area.x + col_width, area.y, col_width, panel_height);
+        let mem_area = Rect::new(area.x + col_width, area.y, area.width - col_width, panel_height);
 
         // History row: CPU and RAM side by side
         let history_y = area.y + panel_height;
         let cpu_history_area = Rect::new(area.x, history_y, col_width, history_height);
-        let ram_history_area = Rect::new(area.x + col_width, history_y, col_width, history_height);
+        let ram_history_area = Rect::new(area.x + col_width, history_y, area.width - col_width, history_height);
 
         // Network and Disk row (2 columns)
         let network_y = history_y + history_height;
@@ -379,8 +377,8 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
 
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Compact, app.cpu_history.get());
         render_memory(f, mem_area, &app.data.memory, true);
-        render_cpu_history(f, cpu_history_area, app.cpu_history.get());
-        render_ram_history(f, ram_history_area, app.ram_history.get());
+        render_history(f, cpu_history_area, app.cpu_history.get(), "CPU History", Color::Blue);
+        render_history(f, ram_history_area, app.ram_history.get(), "RAM History", Color::Green);
         render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
         render_disk(f, disk_area, &app.data.disks);
         render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
@@ -403,19 +401,17 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
         let gpu_area = Rect::new(area.x + col1_width, area.y, col2_width, panel_height);
         let mem_area = Rect::new(area.x + col1_width + col2_width, area.y, col3_width, panel_height);
 
-        let gap_size = 0;
-        let available_width = area.width - gap_size;
-        let history_widget_width = available_width / 2;
+        let history_widget_width = area.width / 2;
 
         // First history row: CPU and RAM side by side
         let history_y = area.y + panel_height;
         let cpu_history_area = Rect::new(area.x, history_y, history_widget_width, history_height);
-        let ram_history_area = Rect::new(area.x + history_widget_width + gap_size, history_y, history_widget_width, history_height);
+        let ram_history_area = Rect::new(area.x + history_widget_width, history_y, area.width - history_widget_width, history_height);
 
         // Second history row: GPU and VRAM side by side
         let gpu_history_y = history_y + history_height;
         let gpu_history_area = Rect::new(area.x, gpu_history_y, history_widget_width, history_height);
-        let vram_history_area = Rect::new(area.x + history_widget_width + gap_size, gpu_history_y, history_widget_width, history_height);
+        let vram_history_area = Rect::new(area.x + history_widget_width, gpu_history_y, area.width - history_widget_width, history_height);
 
         // Network row
         let network_y = gpu_history_y + history_height;
@@ -431,10 +427,10 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Standard, app.cpu_history.get());
         render_gpu(f, gpu_area, &app.data.gpu);
         render_memory(f, mem_area, &app.data.memory, true);
-        render_cpu_history(f, cpu_history_area, app.cpu_history.get());
-        render_ram_history(f, ram_history_area, app.ram_history.get());
-        render_gpu_history(f, gpu_history_area, app.gpu_history.get());
-        render_vram_history(f, vram_history_area, app.vram_history.get());
+        render_history(f, cpu_history_area, app.cpu_history.get(), "CPU History", Color::Blue);
+        render_history(f, ram_history_area, app.ram_history.get(), "RAM History", Color::Green);
+        render_history(f, gpu_history_area, app.gpu_history.get(), "GPU History", Color::Cyan);
+        render_history(f, vram_history_area, app.vram_history.get(), "VRAM History", Color::Magenta);
         render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
         render_disk(f, disk_area, &app.data.disks);
         render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
@@ -470,8 +466,8 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
 
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Standard, app.cpu_history.get());
         render_memory(f, mem_area, &app.data.memory, true);
-        render_cpu_history(f, cpu_history_area, app.cpu_history.get());
-        render_ram_history(f, ram_history_area, app.ram_history.get());
+        render_history(f, cpu_history_area, app.cpu_history.get(), "CPU History", Color::Blue);
+        render_history(f, ram_history_area, app.ram_history.get(), "RAM History", Color::Green);
         render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
         render_disk(f, disk_area, &app.data.disks);
         render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
@@ -497,7 +493,6 @@ fn render_bottom_widget(f: &mut Frame, gol_area: Rect, app: &mut App) {
             }
 
             if let Some(ref gol) = app.gol {
-                let cells = gol.get_cells();
                 let gen = gol.generation();
 
                 let title = format!(" Conway's Game of Life | Generation: {gen} ");
@@ -507,9 +502,7 @@ fn render_bottom_widget(f: &mut Frame, gol_area: Rect, app: &mut App) {
                     .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
                 f.render_widget(gol_block, gol_area);
 
-                // Check if game is dead and show appropriate content
                 if gol.is_dead() {
-                    // Show "all died." text in center
                     let text = "all died.";
                     let text_len = u16::try_from(text.len()).unwrap_or(u16::MAX);
                     let text_x =
@@ -530,14 +523,14 @@ fn render_bottom_widget(f: &mut Frame, gol_area: Rect, app: &mut App) {
                             let top_y = u32::from(term_y) * 2;
                             let bot_y = top_y + 1;
 
-                            let top = cells.contains(&(game_x, top_y));
-                            let bot = bot_y < gol.height && cells.contains(&(game_x, bot_y));
+                            let top = gol.cell_alive(game_x, top_y);
+                            let bot = gol.cell_alive(game_x, bot_y);
 
                             let ch = match (top, bot) {
                                 (true, true) => "█",
                                 (true, false) => "▀",
                                 (false, true) => "▄",
-                                (false, false) => continue, // skip empty, avoid unnecessary renders
+                                (false, false) => continue,
                             };
 
                             f.render_widget(
@@ -552,7 +545,7 @@ fn render_bottom_widget(f: &mut Frame, gol_area: Rect, app: &mut App) {
     }
 }
 
-fn render_cpu_history(f: &mut Frame, area: Rect, history: &[f32]) {
+fn render_history(f: &mut Frame, area: Rect, history: &[f32], title: &str, color: Color) {
     use ratatui::widgets::{Block, Borders};
 
     if history.is_empty() {
@@ -560,7 +553,7 @@ fn render_cpu_history(f: &mut Frame, area: Rect, history: &[f32]) {
     }
 
     let block = Block::default()
-        .title(" CPU History ")
+        .title(format!(" {title} "))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
 
@@ -574,96 +567,8 @@ fn render_cpu_history(f: &mut Frame, area: Rect, history: &[f32]) {
     }
 
     let sparkline = crate::utils::render_sparkline(history, inner_width);
-
     f.render_widget(
-        Paragraph::new(Span::raw(sparkline)).style(Style::default().fg(Color::Blue)),
-        inner,
-    );
-}
-
-fn render_ram_history(f: &mut Frame, area: Rect, history: &[f32]) {
-    use ratatui::widgets::{Block, Borders};
-
-    if history.is_empty() {
-        return;
-    }
-
-    let block = Block::default()
-        .title(" RAM History ")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
-
-    f.render_widget(block, area);
-
-    let inner = area.inner(Margin::new(1, 1));
-    let inner_width = inner.width as usize;
-
-    if inner_width < 10 {
-        return;
-    }
-
-    let sparkline = crate::utils::render_sparkline(history, inner_width);
-
-    f.render_widget(
-        Paragraph::new(Span::raw(sparkline)).style(Style::default().fg(Color::Green)),
-        inner,
-    );
-}
-
-fn render_gpu_history(f: &mut Frame, area: Rect, history: &[f32]) {
-    use ratatui::widgets::{Block, Borders};
-
-    if history.is_empty() {
-        return;
-    }
-
-    let block = Block::default()
-        .title(" GPU History ")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
-
-    f.render_widget(block, area);
-
-    let inner = area.inner(Margin::new(1, 1));
-    let inner_width = inner.width as usize;
-
-    if inner_width < 10 {
-        return;
-    }
-
-    let sparkline = crate::utils::render_sparkline(history, inner_width);
-
-    f.render_widget(
-        Paragraph::new(Span::raw(sparkline)).style(Style::default().fg(Color::Cyan)),
-        inner,
-    );
-}
-
-fn render_vram_history(f: &mut Frame, area: Rect, history: &[f32]) {
-    use ratatui::widgets::{Block, Borders};
-
-    if history.is_empty() {
-        return;
-    }
-
-    let block = Block::default()
-        .title(" VRAM History ")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
-
-    f.render_widget(block, area);
-
-    let inner = area.inner(Margin::new(1, 1));
-    let inner_width = inner.width as usize;
-
-    if inner_width < 10 {
-        return;
-    }
-
-    let sparkline = crate::utils::render_sparkline(history, inner_width);
-
-    f.render_widget(
-        Paragraph::new(Span::raw(sparkline)).style(Style::default().fg(Color::Magenta)),
+        Paragraph::new(Span::raw(sparkline)).style(Style::default().fg(color)),
         inner,
     );
 }

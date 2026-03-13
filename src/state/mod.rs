@@ -16,8 +16,6 @@ pub struct CpuData {
     pub power_draw: Option<f32>,
     pub name: String,
     pub frequency: f32,
-    #[allow(dead_code)]
-    pub core_usage: Vec<f32>,
 }
 
 impl Default for CpuData {
@@ -29,7 +27,6 @@ impl Default for CpuData {
             power_draw: None,
             name: String::new(),
             frequency: 0.0,
-            core_usage: Vec::new(),
         }
     }
 }
@@ -63,8 +60,6 @@ impl Default for GpuData {
 pub struct NetworkData {
     pub upload_speed: f64,
     pub download_speed: f64,
-    #[allow(dead_code)]
-    pub interface: String,
     pub adapter_name: String,
     pub ip_address: String,
 }
@@ -74,7 +69,6 @@ impl Default for NetworkData {
         Self {
             upload_speed: 0.0,
             download_speed: 0.0,
-            interface: "Unknown".to_string(),
             adapter_name: String::new(),
             ip_address: String::new(),
         }
@@ -104,33 +98,18 @@ impl Default for DiskIOData {
     }
 }
 
+#[derive(Default)]
 pub struct SystemInfoData {
     pub hostname: String,
     pub os_name: String,
     pub os_version: String,
     pub uptime: u64,
-    #[allow(dead_code)]
-    pub load_avg: (f32, f32, f32),
-}
-
-impl Default for SystemInfoData {
-    fn default() -> Self {
-        Self {
-            hostname: String::new(),
-            os_name: String::new(),
-            os_version: String::new(),
-            uptime: 0,
-            load_avg: (0.0, 0.0, 0.0),
-        }
-    }
 }
 
 pub struct ProcessData {
     pub name: String,
     pub cpu_usage: f32,
     pub memory_usage: f32,  // Percentage
-    #[allow(dead_code)]
-    pub memory_bytes: u64,
 }
 
 #[derive(Default)]
@@ -193,7 +172,6 @@ mod tests {
         assert_eq!(cpu.fan_speed, None);
         assert_eq!(cpu.name, "");
         assert_eq!(cpu.frequency, 0.0);
-        assert!(cpu.core_usage.is_empty());
     }
 
     #[test]
@@ -211,7 +189,6 @@ mod tests {
         let net = NetworkData::default();
         assert_eq!(net.upload_speed, 0.0);
         assert_eq!(net.download_speed, 0.0);
-        assert_eq!(net.interface, "Unknown");
         assert_eq!(net.adapter_name, "");
         assert_eq!(net.ip_address, "");
     }
@@ -263,6 +240,5 @@ mod tests {
         assert_eq!(info.os_name, "");
         assert_eq!(info.os_version, "");
         assert_eq!(info.uptime, 0);
-        assert_eq!(info.load_avg, (0.0, 0.0, 0.0));
     }
 }

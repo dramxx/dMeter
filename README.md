@@ -79,10 +79,15 @@ dmeter -i 3          # Short form
 
 ## Performance
 
-- **Low CPU overhead**: Optimized data collection with caching
+- **Low CPU overhead**: Targeted `sysinfo` refresh calls instead of `refresh_all()`
 - **Memory efficient**: Minimal memory footprint (~10-20 MB)
-- **Background processing**: Non-blocking memory metrics collection (Windows)
-- **Smart caching**: Extended memory info cached for 10 seconds to reduce WMI overhead
+- **Background processing**: Extended memory metrics collected in a background thread (Windows)
+- **Temperature caching**: CPU temperature subprocess called at most every 10 seconds (not every tick)
+- **Fast disk I/O**: Disk I/O sampled with minimal blocking (~50ms typeperf call on Windows)
+- **IP caching**: Local IP address resolved once and cached for the session
+- **Process gating**: Process list only collected when the process viewer is visible
+- **Frame limiting**: Rendering capped at 20 FPS to reduce CPU usage
+- **Game of Life**: Uses a flat `Vec<bool>` grid for O(1) cell access (no hash overhead)
 
 ## Technical Details
 

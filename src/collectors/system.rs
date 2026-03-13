@@ -3,6 +3,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 use sysinfo::{Disks, Networks, System};
 
 pub struct SystemCollector {
@@ -11,12 +12,25 @@ pub struct SystemCollector {
     disks: Mutex<Disks>,
     last_network_rx: Mutex<u64>,
     last_network_tx: Mutex<u64>,
+    #[cfg_attr(windows, allow(dead_code))]
     last_disk_read: Mutex<u64>,
+    #[cfg_attr(windows, allow(dead_code))]
     last_disk_write: Mutex<u64>,
     memory_receiver: Receiver<(u64, u64, u64)>, // (commit_total, commit_used, cached)
     cached_memory_info: Mutex<(u64, u64, u64)>,
     memory_thread_handle: Option<JoinHandle<()>>,
     shutdown_signal: Arc<AtomicBool>,
+    // CPU temperature TTL cache: only call the slow subprocess every 10s
+    cached_cpu_temp: Mutex<Option<f32>>,
+    cpu_temp_updated: Mutex<std::time::Instant>,
+    // CPU fan speed TTL cache: only call the slow subprocess every 10s
+    cached_cpu_fan: Mutex<Option<u32>>,
+    cpu_fan_updated: Mutex<std::time::Instant>,
+    // CPU power draw TTL cache: only call the slow subprocess every 10s
+    cached_cpu_power: Mutex<Option<f32>>,
+    cpu_power_updated: Mutex<std::time::Instant>,
+    // Local IP cache: doesn't change at runtime
+    cached_ip: Mutex<Option<String>>,
 }
 
 impl Drop for SystemCollector {
@@ -38,7 +52,10 @@ impl SystemCollector {
         let disks = Disks::new_with_refreshed_list();
 
         let (tx, rx) = Self::get_network_totals(&networks);
-        let (read, write) = Self::get_disk_totals(&disks);
+        #[cfg(not(windows))]
+        let (read, write) = Self::get_disk_totals_linux(&disks);
+        #[cfg(windows)]
+        let (read, write) = (0u64, 0u64); // Windows uses typeperf rate directly, no cumulative init needed
 
         // Create background thread for memory collection with shutdown signal
         let (memory_tx, memory_rx) = mpsc::channel();
@@ -79,6 +96,13 @@ impl SystemCollector {
             cached_memory_info: Mutex::new((0, 0, 0)),
             memory_thread_handle: Some(memory_thread_handle),
             shutdown_signal,
+            cached_cpu_temp: Mutex::new(None),
+            cpu_temp_updated: Mutex::new(Instant::now() - Duration::from_secs(60)),
+            cached_cpu_fan: Mutex::new(None),
+            cpu_fan_updated: Mutex::new(Instant::now() - Duration::from_secs(60)),
+            cached_cpu_power: Mutex::new(None),
+            cpu_power_updated: Mutex::new(Instant::now() - Duration::from_secs(60)),
+            cached_ip: Mutex::new(None),
         }
     }
 
@@ -94,82 +118,65 @@ impl SystemCollector {
         (total_tx, total_rx)
     }
 
-    fn get_disk_totals(_disks: &Disks) -> (u64, u64) {
-        #[cfg(windows)]
+    #[cfg(not(windows))]
+    fn get_disk_totals_linux(_disks: &Disks) -> (u64, u64) {
+        use std::fs;
+
+        let mut total_read = 0u64;
+        let mut total_write = 0u64;
+
+        if let Ok(content) = fs::read_to_string("/proc/diskstats") {
+            for line in content.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 10 {
+                    // Format: major minor name read_ios read_merges read_sectors ... write_ios ... write_sectors
+                    if let (Ok(read_sectors), Ok(write_sectors)) =
+                        (parts[5].parse::<u64>(), parts[9].parse::<u64>())
+                    {
+                        total_read += read_sectors * 512;
+                        total_write += write_sectors * 512;
+                    }
+                }
+            }
+        }
+
+        (total_read, total_write)
+    }
+
+    #[cfg(windows)]
+    fn get_disk_rate_windows() -> (u64, u64) {
+        use std::process::Command;
+
+        // Use -si 0.01 -sc 1: sample interval 10ms, 1 sample - returns in ~50ms instead of ~1s
+        // The "Disk Read Bytes/sec" counter is a rate maintained by the OS, so 1 sample is sufficient
+        if let Ok(output) = Command::new("typeperf")
+            .args([
+                "\"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec\",\"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec\"",
+                "-si", "0.01",
+                "-sc", "1",
+            ])
+            .output()
         {
-            use std::process::Command;
-
-            let mut total_read = 0u64;
-            let mut total_write = 0u64;
-
-            // Use typeperf to get real-time disk I/O counters
-            if let Ok(output) = Command::new("typeperf")
-                .args([
-                    "\"\\PhysicalDisk(_Total)\\Disk Read Bytes/sec\",\"\\PhysicalDisk(_Total)\\Disk Write Bytes/sec\"",
-                    "-sc", "1"
-                ])
-                .output()
-            {
-                if output.status.success() {
-                    let output_str = String::from_utf8_lossy(&output.stdout);
-                    // Parse the last line with actual data
-                    if let Some(last_line) = output_str.lines().last() {
-                        let parts: Vec<&str> = last_line.split(',').collect();
-                        if parts.len() >= 3 {
-                            // Skip the first part (timestamp), get read and write values
-                            if let (Ok(read), Ok(write)) = (parts[1].trim_matches('"').parse::<f64>(), parts[2].trim_matches('"').parse::<f64>()) {
-                                total_read = read as u64;
-                                total_write = write as u64;
+            if output.status.success() {
+                let output_str = String::from_utf8_lossy(&output.stdout);
+                // Skip header line, take last data line
+                for line in output_str.lines().rev() {
+                    let parts: Vec<&str> = line.split(',').collect();
+                    if parts.len() >= 3 {
+                        if let (Ok(read), Ok(write)) = (
+                            parts[1].trim_matches('"').trim().parse::<f64>(),
+                            parts[2].trim_matches('"').trim().parse::<f64>(),
+                        ) {
+                            if read >= 0.0 {
+                                return (read as u64, write as u64);
                             }
                         }
                     }
                 }
             }
-
-            // If typeperf fails, try a simple simulation based on system activity
-            if total_read == 0 && total_write == 0 {
-                use std::time::{SystemTime, UNIX_EPOCH};
-                let timestamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-
-                // Simulate realistic disk activity based on time
-                // This gives the appearance of activity when real counters aren't available
-                let activity_factor = (timestamp % 10) as f64 / 10.0; // 0.0 to 0.9
-                total_read = (activity_factor * 50.0 * 1024.0 * 1024.0) as u64; // 0-50 MB/s read
-                total_write = (activity_factor * 30.0 * 1024.0 * 1024.0) as u64;
-                // 0-30 MB/s write
-            }
-
-            (total_read, total_write)
         }
 
-        #[cfg(not(windows))]
-        {
-            use std::fs;
-
-            let mut total_read = 0u64;
-            let mut total_write = 0u64;
-
-            // Read from /proc/diskstats on Linux
-            if let Ok(content) = fs::read_to_string("/proc/diskstats") {
-                for line in content.lines() {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 6 {
-                        // Format: major minor name read_ios read_merges read_sectors write_ios...
-                        if let (Ok(read_sectors), Ok(write_sectors)) =
-                            (parts[5].parse::<u64>(), parts[9].parse::<u64>())
-                        {
-                            total_read += read_sectors * 512; // Convert sectors to bytes
-                            total_write += write_sectors * 512;
-                        }
-                    }
-                }
-            }
-
-            (total_read, total_write)
-        }
+        (0, 0)
     }
 
     pub fn collect(&mut self, collect_processes: bool) -> SystemData {
@@ -239,23 +246,46 @@ impl SystemCollector {
         let usage = sys.global_cpu_usage();
         let frequency = cpus.first().map(|c| c.frequency()).unwrap_or(0);
 
-        let core_usage: Vec<f32> = cpus.iter().map(|c| c.cpu_usage()).collect();
+        drop(sys); // Release mutex before slow subprocess calls
 
-        let _physical_cores = sys.physical_core_count().unwrap_or(0);
-        let _logical_cores = sys.cpus().len();
+        // TTL cache: only call subprocesses every 10 seconds to avoid blocking
+        let temperature = {
+            let mut cached = self.cached_cpu_temp.lock().unwrap_or_else(|e| e.into_inner());
+            let mut updated = self.cpu_temp_updated.lock().unwrap_or_else(|e| e.into_inner());
+            if updated.elapsed() >= Duration::from_secs(10) {
+                *cached = get_cpu_temperature();
+                *updated = Instant::now();
+            }
+            *cached
+        };
 
-        // Try to get CPU temperature, fan speed, and power draw
-        let temperature = get_cpu_temperature().or(Some(45.0)); // Test fallback
-        let (fan_speed, power_draw) = get_cpu_fan_and_power();
+        let fan_speed = {
+            let mut cached = self.cached_cpu_fan.lock().unwrap_or_else(|e| e.into_inner());
+            let mut updated = self.cpu_fan_updated.lock().unwrap_or_else(|e| e.into_inner());
+            if updated.elapsed() >= Duration::from_secs(10) {
+                *cached = get_cpu_fan_speed();
+                *updated = Instant::now();
+            }
+            *cached
+        };
+
+        let power_draw = {
+            let mut cached = self.cached_cpu_power.lock().unwrap_or_else(|e| e.into_inner());
+            let mut updated = self.cpu_power_updated.lock().unwrap_or_else(|e| e.into_inner());
+            if updated.elapsed() >= Duration::from_secs(10) {
+                *cached = get_cpu_power_draw();
+                *updated = Instant::now();
+            }
+            *cached
+        };
 
         CpuData {
             name,
             usage,
-            core_usage,
             temperature,
             frequency: frequency as f32,
             fan_speed,
-            power_draw: power_draw.map(|p| p as f32),
+            power_draw,
         }
     }
 
@@ -290,14 +320,8 @@ impl SystemCollector {
         let networks = self.networks.lock().unwrap_or_else(|e| e.into_inner());
         let (total_tx, total_rx) = Self::get_network_totals(&networks);
 
-        let mut last_tx = self
-            .last_network_tx
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        let mut last_rx = self
-            .last_network_rx
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut last_tx = self.last_network_tx.lock().unwrap_or_else(|e| e.into_inner());
+        let mut last_rx = self.last_network_rx.lock().unwrap_or_else(|e| e.into_inner());
 
         let upload_speed = total_tx.saturating_sub(*last_tx);
         let download_speed = total_rx.saturating_sub(*last_rx);
@@ -306,50 +330,58 @@ impl SystemCollector {
         *last_rx = total_rx;
 
         let mut adapter_name = String::new();
-        let mut ip_address = String::new();
-
-        // Try to get local IP address
-        if let Ok(local_ip) = get_local_ip() {
-            ip_address = local_ip;
-        }
-
         for (name, data) in networks.iter() {
             if (data.received() > 0 || data.transmitted() > 0) && adapter_name.is_empty() {
                 adapter_name = name.clone();
             }
         }
 
+        // Cache local IP - it doesn't change at runtime
+        let ip_address = {
+            let mut cached = self.cached_ip.lock().unwrap_or_else(|e| e.into_inner());
+            if cached.is_none() {
+                *cached = get_local_ip().ok();
+            }
+            cached.clone().unwrap_or_default()
+        };
+
         NetworkData {
-            adapter_name: adapter_name.clone(),
+            adapter_name,
             ip_address,
             upload_speed: upload_speed as f64,
             download_speed: download_speed as f64,
-            interface: adapter_name,
         }
     }
 
     fn collect_disk_io(&self) -> crate::state::DiskIOData {
-        let disks = self.disks.lock().unwrap_or_else(|e| e.into_inner());
-        let (total_read, total_write) = Self::get_disk_totals(&disks);
+        #[cfg(windows)]
+        {
+            // typeperf returns bytes/sec directly - use rate without computing delta
+            let (read_rate, write_rate) = Self::get_disk_rate_windows();
+            crate::state::DiskIOData {
+                read_speed: read_rate as f64,
+                write_speed: write_rate as f64,
+            }
+        }
 
-        let mut last_read = self
-            .last_disk_read
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        let mut last_write = self
-            .last_disk_write
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        #[cfg(not(windows))]
+        {
+            let disks = self.disks.lock().unwrap_or_else(|e| e.into_inner());
+            let (total_read, total_write) = Self::get_disk_totals_linux(&disks);
 
-        let read_speed = total_read.saturating_sub(*last_read);
-        let write_speed = total_write.saturating_sub(*last_write);
+            let mut last_read = self.last_disk_read.lock().unwrap_or_else(|e| e.into_inner());
+            let mut last_write = self.last_disk_write.lock().unwrap_or_else(|e| e.into_inner());
 
-        *last_read = total_read;
-        *last_write = total_write;
+            let read_speed = total_read.saturating_sub(*last_read);
+            let write_speed = total_write.saturating_sub(*last_write);
 
-        crate::state::DiskIOData {
-            read_speed: read_speed as f64,
-            write_speed: write_speed as f64,
+            *last_read = total_read;
+            *last_write = total_write;
+
+            crate::state::DiskIOData {
+                read_speed: read_speed as f64,
+                write_speed: write_speed as f64,
+            }
         }
     }
 
@@ -368,25 +400,12 @@ impl SystemCollector {
     }
 
     fn collect_system(&self) -> SystemInfoData {
-        let _sys = self.sys.lock().unwrap_or_else(|e| e.into_inner());
-
-        let os_name = System::name().unwrap_or_else(|| "Unknown".to_string());
-        let os_version = System::os_version().unwrap_or_else(|| "Unknown".to_string());
-        let hostname = System::host_name().unwrap_or_else(|| "Unknown".to_string());
-        let uptime = System::uptime();
-
-        let load_avg = sysinfo::System::load_average();
-
+        // Note: System::name/os_version/host_name/uptime are static methods, no mutex needed
         SystemInfoData {
-            os_name,
-            os_version,
-            hostname,
-            uptime,
-            load_avg: (
-                load_avg.one as f32,
-                load_avg.five as f32,
-                load_avg.fifteen as f32,
-            ),
+            os_name: System::name().unwrap_or_else(|| "Unknown".to_string()),
+            os_version: System::os_version().unwrap_or_else(|| "Unknown".to_string()),
+            hostname: System::host_name().unwrap_or_else(|| "Unknown".to_string()),
+            uptime: System::uptime(),
         }
     }
 
@@ -398,9 +417,8 @@ impl SystemCollector {
             .processes()
             .values()
             .map(|process| {
-                let memory_bytes = process.memory();
                 let memory_usage = if total_memory > 0 {
-                    (memory_bytes as f32 / total_memory as f32) * 100.0
+                    (process.memory() as f32 / total_memory as f32) * 100.0
                 } else {
                     0.0
                 };
@@ -409,7 +427,6 @@ impl SystemCollector {
                     name: process.name().to_string_lossy().to_string(),
                     cpu_usage: process.cpu_usage(),
                     memory_usage,
-                    memory_bytes,
                 }
             })
             .collect();
@@ -432,18 +449,150 @@ impl SystemCollector {
 fn get_cpu_temperature() -> Option<f32> {
     use std::process::Command;
 
-    // Try to get CPU temperature using PowerShell
+    // Method 1: Try MSAcpi_ThermalZoneTemperature (works on some laptops)
     if let Ok(output) = Command::new("powershell")
         .args([
+            "-NoProfile",
             "-Command",
-            "Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace 'root/wmi' | Select-Object -First 1 CurrentTemperature | ForEach-Object {($_.CurrentTemperature - 2732) / 10.0}"
+            "Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace 'root/wmi' -ErrorAction SilentlyContinue | Select-Object -First 1 CurrentTemperature | ForEach-Object {($_.CurrentTemperature - 2732) / 10.0}"
         ])
         .output()
     {
         if output.status.success() {
             let temp_str = String::from_utf8_lossy(&output.stdout);
-            if let Ok(temp) = temp_str.trim().parse::<f32>() {
-                return Some(temp);
+            let trimmed = temp_str.trim();
+            if !trimmed.is_empty() {
+                if let Ok(temp) = trimmed.parse::<f32>() {
+                    if temp > 0.0 && temp < 150.0 {
+                        return Some(temp);
+                    }
+                }
+            }
+        }
+    }
+
+    // Method 2: Try Win32_TemperatureProbe
+    if let Ok(output) = Command::new("wmic")
+        .args(["path", "Win32_TemperatureProbe", "get", "CurrentReading", "/value"])
+        .output()
+    {
+        if output.status.success() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            for line in output_str.lines() {
+                if line.starts_with("CurrentReading=") {
+                    if let Some(value) = line.split('=').nth(1) {
+                        if let Ok(temp_tenths) = value.trim().parse::<i32>() {
+                            let temp = temp_tenths as f32 / 10.0;
+                            if temp > 0.0 && temp < 150.0 {
+                                return Some(temp);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(windows)]
+fn get_cpu_fan_speed() -> Option<u32> {
+    use std::process::Command;
+
+    // Method 1: Try Win32_Fan DesiredSpeed
+    if let Ok(output) = Command::new("wmic")
+        .args(["path", "Win32_Fan", "get", "DesiredSpeed", "/value"])
+        .output()
+    {
+        if output.status.success() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            for line in output_str.lines() {
+                if line.starts_with("DesiredSpeed=") {
+                    if let Some(value) = line.split('=').nth(1) {
+                        let trimmed = value.trim();
+                        if !trimmed.is_empty() {
+                            if let Ok(speed) = trimmed.parse::<u32>() {
+                                if speed > 0 {
+                                    let percentage = ((speed as f32 / 3000.0) * 100.0).min(100.0) as u32;
+                                    return Some(percentage);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Method 2: Try Win32_Fan ActiveCooling (boolean)
+    if let Ok(output) = Command::new("wmic")
+        .args(["path", "Win32_Fan", "get", "ActiveCooling", "/value"])
+        .output()
+    {
+        if output.status.success() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            for line in output_str.lines() {
+                if line.starts_with("ActiveCooling=") {
+                    if let Some(value) = line.split('=').nth(1) {
+                        if value.trim().to_lowercase() == "true" {
+                            // Fan is active, return a generic 50% since we can't get actual speed
+                            return Some(50);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(windows)]
+fn get_cpu_power_draw() -> Option<f32> {
+    use std::process::Command;
+
+    // Method 1: Try Processor Performance counter
+    if let Ok(output) = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "Get-Counter '\\Processor Information(_Total)\\% Processor Performance' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CounterSamples | Select-Object -ExpandProperty CookedValue"
+        ])
+        .output()
+    {
+        if output.status.success() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let trimmed = output_str.trim();
+            if !trimmed.is_empty() {
+                if let Ok(perf) = trimmed.parse::<f32>() {
+                    if perf > 0.0 {
+                        // Estimate based on typical Ryzen 7 7800X3D TDP (120W)
+                        let estimated_power = (perf / 100.0) * 120.0;
+                        return Some(estimated_power);
+                    }
+                }
+            }
+        }
+    }
+
+    // Method 2: Try Win32_Processor CurrentVoltage and LoadPercentage
+    if let Ok(output) = Command::new("wmic")
+        .args(["cpu", "get", "LoadPercentage", "/value"])
+        .output()
+    {
+        if output.status.success() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            for line in output_str.lines() {
+                if line.starts_with("LoadPercentage=") {
+                    if let Some(value) = line.split('=').nth(1) {
+                        if let Ok(load) = value.trim().parse::<f32>() {
+                            // Rough estimate: 120W TDP for Ryzen 7 7800X3D
+                            let estimated_power = (load / 100.0) * 120.0;
+                            return Some(estimated_power);
+                        }
+                    }
+                }
             }
         }
     }
@@ -465,17 +614,78 @@ fn get_cpu_temperature() -> Option<f32> {
     None
 }
 
-#[cfg(windows)]
-fn get_cpu_fan_and_power() -> (Option<u32>, Option<u32>) {
-    // For now, return test values - these can be implemented with proper WMI queries
-    (Some(65), Some(95)) // (fan_speed %, power_draw watts)
+#[cfg(not(windows))]
+fn get_cpu_fan_speed() -> Option<u32> {
+    use std::fs;
+    use std::path::Path;
+
+    // Try to read fan speed from hwmon
+    // Common paths: /sys/class/hwmon/hwmon*/fan*_input
+    for hwmon_idx in 0..10 {
+        let base_path = format!("/sys/class/hwmon/hwmon{}", hwmon_idx);
+        if !Path::new(&base_path).exists() {
+            continue;
+        }
+
+        // Try fan1_input, fan2_input, etc.
+        for fan_idx in 1..5 {
+            let fan_path = format!("{}/fan{}_input", base_path, fan_idx);
+            if let Ok(content) = fs::read_to_string(&fan_path) {
+                if let Ok(rpm) = content.trim().parse::<u32>() {
+                    if rpm > 0 {
+                        // Convert RPM to percentage (assume max ~3000 RPM for CPU fans)
+                        let percentage = ((rpm as f32 / 3000.0) * 100.0).min(100.0) as u32;
+                        return Some(percentage);
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 #[cfg(not(windows))]
-fn get_cpu_fan_and_power() -> (Option<u32>, Option<u32>) {
-    // For Linux, could implement with lm-sensors or sysfs
-    // For now, return test values
-    (Some(70), Some(85))
+fn get_cpu_power_draw() -> Option<f32> {
+    use std::fs;
+    use std::path::Path;
+
+    // Try to read CPU power from hwmon (RAPL - Running Average Power Limit)
+    // Path: /sys/class/hwmon/hwmon*/power*_input or /sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj
+    
+    // Try intel-rapl first (more accurate for Intel CPUs)
+    if let Ok(content) = fs::read_to_string("/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj") {
+        if let Ok(energy_uj) = content.trim().parse::<u64>() {
+            // This gives energy in microjoules, we'd need to track delta over time
+            // For now, we'll skip this approach and try hwmon power sensors
+            let _ = energy_uj; // Suppress unused warning
+        }
+    }
+
+    // Try hwmon power sensors
+    for hwmon_idx in 0..10 {
+        let base_path = format!("/sys/class/hwmon/hwmon{}", hwmon_idx);
+        if !Path::new(&base_path).exists() {
+            continue;
+        }
+
+        // Check if this is a CPU power sensor by reading the name
+        if let Ok(name) = fs::read_to_string(format!("{}/name", base_path)) {
+            let name = name.trim().to_lowercase();
+            // Look for CPU-related power sensors
+            if name.contains("coretemp") || name.contains("k10temp") || name.contains("cpu") {
+                // Try power1_input (power in microwatts)
+                if let Ok(content) = fs::read_to_string(format!("{}/power1_input", base_path)) {
+                    if let Ok(power_uw) = content.trim().parse::<u64>() {
+                        // Convert microwatts to watts
+                        return Some(power_uw as f32 / 1_000_000.0);
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 impl Default for SystemCollector {

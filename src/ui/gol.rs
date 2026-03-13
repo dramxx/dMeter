@@ -1,41 +1,32 @@
-use std::collections::HashSet;
-
 use std::time::Instant;
 
 pub struct GameOfLife {
-    pub cells: HashSet<(u32, u32)>,
+    cells: Vec<bool>,  // flat grid: cells[y * width + x]
     pub width: u32,
     pub height: u32,
     pub generation: u32,
     is_dead: bool,
     death_time: Option<Instant>,
-    #[cfg(debug_assertions)]
-    cells_processed_last_step: usize,
 }
 
 impl GameOfLife {
     pub fn new(width: u32, height: u32) -> Self {
         let mut gol = Self {
-            cells: HashSet::new(),
+            cells: vec![false; (width * height) as usize],
             width,
             height,
             generation: 0,
             is_dead: false,
             death_time: None,
-            #[cfg(debug_assertions)]
-            cells_processed_last_step: 0,
         };
         gol.randomize();
         gol
     }
 
     pub fn randomize(&mut self) {
-        self.cells.clear();
         for y in 0..self.height {
             for x in 0..self.width {
-                if rand_simple(x, y, self.generation) {
-                    self.cells.insert((x, y));
-                }
+                self.cells[(y * self.width + x) as usize] = rand_simple(x, y, self.generation);
             }
         }
         self.generation = 0;
@@ -44,80 +35,25 @@ impl GameOfLife {
     }
 
     pub fn step(&mut self) {
-        // Check if we're in death state and need to revive
         if self.is_dead {
             if let Some(death_time) = self.death_time {
                 if death_time.elapsed().as_secs() >= 10 {
-                    self.randomize(); // Revive after 10 seconds
+                    self.randomize();
                 }
             }
-            return; // Don't process game logic while dead
+            return;
         }
 
-        let mut new_cells = HashSet::new();
+        let mut new_cells = vec![false; self.cells.len()];
 
-        // OPTIMIZATION: Only process cells near alive cells
-        // This dramatically reduces work when few cells are alive
-        let total_cells = self.width * self.height;
-        if self.cells.len() < total_cells as usize / 10 {
-            // Sparse optimization: only check neighbors of alive cells and their neighbors
-            let mut cells_to_check = HashSet::new();
-            
-            for &(x, y) in &self.cells {
-                for dy in -1i32..=1 {
-                    for dx in -1i32..=1 {
-                        let nx = x as i32 + dx;
-                        let ny = y as i32 + dy;
-                        if nx >= 0 && nx < self.width as i32 && ny >= 0 && ny < self.height as i32 {
-                            cells_to_check.insert((nx as u32, ny as u32));
-                        }
-                    }
-                }
-            }
-            
-            #[cfg(debug_assertions)]
-            let cells_checked = cells_to_check.len();
-            
-            for (x, y) in cells_to_check {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let idx = (y * self.width + x) as usize;
                 let neighbors = self.count_neighbors(x, y);
-                let alive = self.cells.contains(&(x, y));
+                let alive = self.cells[idx];
 
                 if neighbors == 3 || (alive && neighbors == 2) {
-                    new_cells.insert((x, y));
-                }
-            }
-            
-            #[cfg(debug_assertions)]
-            {
-                self.cells_processed_last_step = cells_checked;
-                if self.generation % 25 == 0 {  // Log every 5 seconds
-                    let total_cells = self.width * self.height;
-                    let efficiency = (total_cells as usize - cells_checked) * 100 / total_cells as usize;
-                    log::debug!("GoL optimization: processed {} of {} cells ({}% saved)", 
-                        cells_checked, total_cells, efficiency);
-                }
-            }
-        } else {
-            // Dense optimization: use original algorithm when many cells are alive
-            #[cfg(debug_assertions)]
-            let total_cells = self.width * self.height;
-            
-            for y in 0..self.height {
-                for x in 0..self.width {
-                    let neighbors = self.count_neighbors(x, y);
-                    let alive = self.cells.contains(&(x, y));
-
-                    if neighbors == 3 || (alive && neighbors == 2) {
-                        new_cells.insert((x, y));
-                    }
-                }
-            }
-            
-            #[cfg(debug_assertions)]
-            {
-                self.cells_processed_last_step = total_cells as usize;
-                if self.generation % 25 == 0 {  // Log every 5 seconds
-                    log::debug!("GoL dense mode: processed all {} cells", total_cells);
+                    new_cells[idx] = true;
                 }
             }
         }
@@ -125,8 +61,7 @@ impl GameOfLife {
         self.cells = new_cells;
         self.generation += 1;
 
-        // Check if all cells died
-        if self.cells.is_empty() {
+        if !self.cells.iter().any(|&c| c) {
             self.is_dead = true;
             self.death_time = Some(Instant::now());
         }
@@ -134,6 +69,8 @@ impl GameOfLife {
 
     fn count_neighbors(&self, x: u32, y: u32) -> u32 {
         let mut count = 0;
+        let w = self.width as i32;
+        let h = self.height as i32;
         for dy in -1i32..=1 {
             for dx in -1i32..=1 {
                 if dx == 0 && dy == 0 {
@@ -141,11 +78,8 @@ impl GameOfLife {
                 }
                 let nx = x as i32 + dx;
                 let ny = y as i32 + dy;
-                if nx >= 0
-                    && nx < self.width as i32
-                    && ny >= 0
-                    && ny < self.height as i32
-                    && self.cells.contains(&(nx as u32, ny as u32))
+                if nx >= 0 && nx < w && ny >= 0 && ny < h
+                    && self.cells[(ny as u32 * self.width + nx as u32) as usize]
                 {
                     count += 1;
                 }
@@ -154,8 +88,11 @@ impl GameOfLife {
         count
     }
 
-    pub fn get_cells(&self) -> &HashSet<(u32, u32)> {
-        &self.cells
+    pub fn cell_alive(&self, x: u32, y: u32) -> bool {
+        if x >= self.width || y >= self.height {
+            return false;
+        }
+        self.cells[(y * self.width + x) as usize]
     }
 
     pub fn generation(&self) -> u32 {
@@ -183,22 +120,49 @@ mod tests {
     #[test]
     fn test_vertical_neighbors() {
         let mut gol = GameOfLife::new(5, 5);
-        gol.cells.clear();
-        
+        // Clear all cells
+        gol.cells.iter_mut().for_each(|c| *c = false);
+
         // Create vertical stack at (2, 1) and (2, 2)
-        gol.cells.insert((2, 1));
-        gol.cells.insert((2, 2));
-        
-        // Cell at (2, 1) should have 1 neighbor (the cell below at (2, 2))
+        gol.cells[7] = true;  // y=1, x=2: 1*5+2
+        gol.cells[12] = true; // y=2, x=2: 2*5+2
+
         assert_eq!(gol.count_neighbors(2, 1), 1);
-        
-        // Cell at (2, 2) should have 1 neighbor (the cell above at (2, 1))
         assert_eq!(gol.count_neighbors(2, 2), 1);
-        
+
         // Add a third cell above at (2, 0)
-        gol.cells.insert((2, 0));
-        
-        // Now (2, 1) should have 2 neighbors (above and below)
+        gol.cells[2] = true; // y=0, x=2: 0*5+2
+
         assert_eq!(gol.count_neighbors(2, 1), 2);
+    }
+
+    #[test]
+    fn test_cell_alive() {
+        let mut gol = GameOfLife::new(5, 5);
+        gol.cells.iter_mut().for_each(|c| *c = false);
+        gol.cells[13] = true; // y=2, x=3: 2*5+3
+
+        assert!(gol.cell_alive(3, 2));
+        assert!(!gol.cell_alive(0, 0));
+        assert!(!gol.cell_alive(10, 10)); // out of bounds
+    }
+
+    #[test]
+    fn test_step_blinker() {
+        // Horizontal blinker at row 2: cells (1,2), (2,2), (3,2)
+        let mut gol = GameOfLife::new(5, 5);
+        gol.cells.iter_mut().for_each(|c| *c = false);
+        gol.cells[11] = true; // y=2, x=1: 2*5+1
+        gol.cells[12] = true; // y=2, x=2: 2*5+2
+        gol.cells[13] = true; // y=2, x=3: 2*5+3
+
+        gol.step();
+
+        // After one step, blinker should be vertical: (2,1), (2,2), (2,3)
+        assert!(gol.cell_alive(2, 1));
+        assert!(gol.cell_alive(2, 2));
+        assert!(gol.cell_alive(2, 3));
+        assert!(!gol.cell_alive(1, 2));
+        assert!(!gol.cell_alive(3, 2));
     }
 }

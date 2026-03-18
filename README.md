@@ -35,10 +35,10 @@ winget install dMeter
 ### From Source
 
 ```bash
-cargo build --release
+cargo install --path .
 ```
 
-The binary will be at `target/release/dmeter` (Linux/macOS) or `target/release/dmeter.exe` (Windows).
+This builds and installs the binary to your Cargo bin directory (e.g., `~/.cargo/bin/` on Linux/macOS or `%USERPROFILE%\.cargo\bin\` on Windows), making `dmeter` available globally in your PATH.
 
 ### Prerequisites
 

@@ -191,6 +191,8 @@ impl SystemCollector {
             // Only refresh processes if we need them
             if collect_processes {
                 sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+                // Second refresh needed for CPU usage data to be populated
+                sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
             }
         }
 

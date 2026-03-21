@@ -12,22 +12,23 @@ pub fn collect_gpu_data() -> GpuData {
         // Quick check if NVIDIA driver might be present before attempting NVML init
         let driver_present = check_nvidia_driver_present();
         if !driver_present {
-            return GpuData {
-                available: false,
-                name: "No NVIDIA GPU".to_string(),
-                usage: 0.0,
-                memory_used: 0,
-                memory_total: 0,
-                temperature: None,
-                fan_speed: None,
-                power_draw: None,
-            };
+            return default_gpu_data();
         }
 
         match try_nvidia() {
             Ok(gpu) => return gpu,
-            Err(e) => {
-                log::warn!("GPU detection failed: {}", e);
+            Err(_) => {
+                // Silently fall back to default
+            }
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        match try_nvidia() {
+            Ok(gpu) => return gpu,
+            Err(_) => {
+                // Silently fall back to default
             }
         }
     }

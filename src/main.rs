@@ -9,6 +9,9 @@ use ratatui::crossterm::{
     execute,
     terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
+
+#[cfg(not(windows))]
+use ratatui::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
 use ratatui::{backend::CrosstermBackend, prelude::*, widgets::*, Frame, Terminal};
 
 use crate::collectors::SystemCollector;
@@ -170,6 +173,8 @@ fn main() -> io::Result<()> {
 
     if let Err(e) = result {
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        #[cfg(not(windows))]
+        let _ = disable_raw_mode();
         if let Some(s) = e.downcast_ref::<&str>() {
             eprintln!("\n\nPANIC: {}\n", s);
         } else if let Some(s) = e.downcast_ref::<String>() {
@@ -199,6 +204,9 @@ fn main_inner() -> io::Result<()> {
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
     terminal.hide_cursor()?;
+
+    #[cfg(not(windows))]
+    let _ = enable_raw_mode();
 
     let mut app = App::new(cli);
 
@@ -282,6 +290,9 @@ fn main_inner() -> io::Result<()> {
     execute!(io::stdout(), LeaveAlternateScreen,)?;
     terminal.show_cursor()?;
 
+    #[cfg(not(windows))]
+    let _ = disable_raw_mode();
+
     Ok(())
 }
 
@@ -337,12 +348,10 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
     let history_height = 3u16;
 
     if has_gpu(app) {
-        // Original 3-column layout with GPU
         let col1_width = area.width / 3;
         let col2_width = area.width / 3;
         let col3_width = area.width - col1_width - col2_width;
 
-        // Top row panels
         let cpu_area = Rect::new(area.x, area.y, col1_width, panel_height);
         let gpu_area = Rect::new(area.x + col1_width, area.y, col2_width, panel_height);
         let mem_area = Rect::new(
@@ -354,7 +363,6 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
 
         let history_widget_width = area.width / 2;
 
-        // First history row: CPU and RAM side by side
         let history_y = area.y + panel_height;
         let cpu_history_area = Rect::new(area.x, history_y, history_widget_width, history_height);
         let ram_history_area = Rect::new(
@@ -364,7 +372,6 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
             history_height,
         );
 
-        // Second history row: GPU and VRAM side by side
         let gpu_history_y = history_y + history_height;
         let gpu_history_area = Rect::new(area.x, gpu_history_y, history_widget_width, history_height);
         let vram_history_area = Rect::new(
@@ -374,7 +381,6 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
             history_height,
         );
 
-        // Bottom row panels
         let network_y = gpu_history_y + history_height;
         let net_area = Rect::new(
             area.x,
@@ -406,28 +412,27 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
         render_disk(f, disk_area, &app.data.disks);
         render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
     } else {
-        // No GPU: 2-column layout
         let col_width = area.width / 2;
 
-        // Top row: CPU and Memory (2 columns)
         let cpu_area = Rect::new(area.x, area.y, col_width, panel_height);
         let mem_area = Rect::new(area.x + col_width, area.y, area.width - col_width, panel_height);
 
-        // History row: CPU and RAM side by side
         let history_y = area.y + panel_height;
         let cpu_history_area = Rect::new(area.x, history_y, col_width, history_height);
         let ram_history_area = Rect::new(area.x + col_width, history_y, area.width - col_width, history_height);
 
-        // Network and Disk row (2 columns)
         let network_y = history_y + history_height;
-        let bottom_height = 5u16;
+        let bottom_height = 4u16;
         let net_area = Rect::new(area.x, network_y, col_width, bottom_height);
         let disk_area = Rect::new(area.x + col_width, network_y, col_width, bottom_height);
 
-        // Disk I/O (full width)
         let disk_io_y = network_y + bottom_height;
-        let disk_io_height = area.height.saturating_sub(panel_height + history_height + bottom_height);
+        let disk_io_height = 3u16;
         let disk_io_area = Rect::new(area.x, disk_io_y, area.width, disk_io_height);
+
+        let gol_y = disk_io_y + disk_io_height;
+        let gol_height = area.height.saturating_sub(panel_height + history_height + bottom_height + disk_io_height);
+        let gol_area = Rect::new(area.x, gol_y, area.width, gol_height);
 
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Compact, app.cpu_history.get());
         render_memory(f, mem_area, &app.data.memory, true);
@@ -436,6 +441,8 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
         render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
         render_disk(f, disk_area, &app.data.disks);
         render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
+
+        render_bottom_widget(f, gol_area, app);
     }
 }
 

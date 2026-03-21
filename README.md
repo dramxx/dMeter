@@ -2,6 +2,8 @@
 
 A fast, beautiful terminal system monitor built with Rust and Ratatui, featuring **Conway's Game of Life** as the centerpiece.
 
+![alt text](image.png)
+
 ## Features
 
 ### Conway's Game of Life <3

@@ -145,8 +145,8 @@ impl HistoryBuffer {
         self.data.push(value);
     }
 
-    pub fn get(&self) -> Vec<f32> {
-        self.data.clone()
+    pub fn get(&self) -> &[f32] {
+        &self.data
     }
 }
 
@@ -213,14 +213,14 @@ mod tests {
         let mut buffer = HistoryBuffer::new(3);
         
         buffer.push(1.0);
-        assert_eq!(buffer.get(), vec![0.0, 0.0, 1.0]);
+        assert_eq!(buffer.get(), &[0.0, 0.0, 1.0]);
         
         buffer.push(2.0);
         buffer.push(3.0);
-        assert_eq!(buffer.get(), vec![1.0, 2.0, 3.0]);
+        assert_eq!(buffer.get(), &[1.0, 2.0, 3.0]);
         
         buffer.push(4.0);
-        assert_eq!(buffer.get(), vec![2.0, 3.0, 4.0]);
+        assert_eq!(buffer.get(), &[2.0, 3.0, 4.0]);
     }
 
     #[test]

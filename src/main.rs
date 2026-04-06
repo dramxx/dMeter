@@ -401,16 +401,16 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
             area.height - panel_height - (history_height * 2) - 1,
         );
 
-        render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Compact, &&app.cpu_history.get());
+        render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Compact, app.cpu_history.get());
         render_gpu(f, gpu_area, &app.data.gpu);
         render_memory(f, mem_area, &app.data.memory, true);
-        render_history(f, cpu_history_area, &&app.cpu_history.get(), "CPU History", Color::Blue);
-        render_history(f, ram_history_area, &&app.ram_history.get(), "RAM History", Color::Green);
-        render_history(f, gpu_history_area, &&app.gpu_history.get(), "GPU History", Color::Cyan);
-        render_history(f, vram_history_area, &&app.vram_history.get(), "VRAM History", Color::Magenta);
-        render_network(f, net_area, &app.data.network, &app.network_rx_history.get(), &app.network_tx_history.get());
+        render_history(f, cpu_history_area, app.cpu_history.get(), "CPU History", Color::Blue);
+        render_history(f, ram_history_area, app.ram_history.get(), "RAM History", Color::Green);
+        render_history(f, gpu_history_area, app.gpu_history.get(), "GPU History", Color::Cyan);
+        render_history(f, vram_history_area, app.vram_history.get(), "VRAM History", Color::Magenta);
+        render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
         render_disk(f, disk_area, &app.data.disks);
-        render_disk_io(f, disk_io_area, &app.data.disk_io, &app.disk_read_history.get(), &app.disk_write_history.get());
+        render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
     } else {
         let col_width = area.width / 2;
 
@@ -434,13 +434,13 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
         let gol_height = area.height.saturating_sub(panel_height + history_height + bottom_height + disk_io_height);
         let gol_area = Rect::new(area.x, gol_y, area.width, gol_height);
 
-        render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Compact, &&app.cpu_history.get());
+        render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Compact, app.cpu_history.get());
         render_memory(f, mem_area, &app.data.memory, true);
-        render_history(f, cpu_history_area, &&app.cpu_history.get(), "CPU History", Color::Blue);
-        render_history(f, ram_history_area, &&app.ram_history.get(), "RAM History", Color::Green);
-        render_network(f, net_area, &app.data.network, &app.network_rx_history.get(), &app.network_tx_history.get());
+        render_history(f, cpu_history_area, app.cpu_history.get(), "CPU History", Color::Blue);
+        render_history(f, ram_history_area, app.ram_history.get(), "RAM History", Color::Green);
+        render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
         render_disk(f, disk_area, &app.data.disks);
-        render_disk_io(f, disk_io_area, &app.data.disk_io, &app.disk_read_history.get(), &app.disk_write_history.get());
+        render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
 
         render_bottom_widget(f, gol_area, app);
     }
@@ -485,16 +485,16 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
         let gol_height = area.height.saturating_sub(panel_height + (history_height * 2) + network_height + 2);
         let gol_area = Rect::new(area.x, gol_y, area.width, gol_height);
 
-        render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Standard, &app.cpu_history.get());
+        render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Standard, app.cpu_history.get());
         render_gpu(f, gpu_area, &app.data.gpu);
         render_memory(f, mem_area, &app.data.memory, true);
-        render_history(f, cpu_history_area, &app.cpu_history.get(), "CPU History", Color::Blue);
-        render_history(f, ram_history_area, &app.ram_history.get(), "RAM History", Color::Green);
-        render_history(f, gpu_history_area, &app.gpu_history.get(), "GPU History", Color::Cyan);
-        render_history(f, vram_history_area, &app.vram_history.get(), "VRAM History", Color::Magenta);
-        render_network(f, net_area, &app.data.network, &app.network_rx_history.get(), &app.network_tx_history.get());
+        render_history(f, cpu_history_area, app.cpu_history.get(), "CPU History", Color::Blue);
+        render_history(f, ram_history_area, app.ram_history.get(), "RAM History", Color::Green);
+        render_history(f, gpu_history_area, app.gpu_history.get(), "GPU History", Color::Cyan);
+        render_history(f, vram_history_area, app.vram_history.get(), "VRAM History", Color::Magenta);
+        render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
         render_disk(f, disk_area, &app.data.disks);
-        render_disk_io(f, disk_io_area, &app.data.disk_io, &app.disk_read_history.get(), &app.disk_write_history.get());
+        render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
 
         render_bottom_widget(f, gol_area, app);
     } else {
@@ -525,13 +525,13 @@ fn render_standard_mode(f: &mut Frame, area: Rect, app: &mut App) {
         let gol_height = area.height.saturating_sub(panel_height + history_height + network_height + disk_height + 1);
         let gol_area = Rect::new(area.x, gol_y, area.width, gol_height);
 
-        render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Standard, &app.cpu_history.get());
+        render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Standard, app.cpu_history.get());
         render_memory(f, mem_area, &app.data.memory, true);
-        render_history(f, cpu_history_area, &app.cpu_history.get(), "CPU History", Color::Blue);
-        render_history(f, ram_history_area, &app.ram_history.get(), "RAM History", Color::Green);
-        render_network(f, net_area, &app.data.network, &app.network_rx_history.get(), &app.network_tx_history.get());
+        render_history(f, cpu_history_area, app.cpu_history.get(), "CPU History", Color::Blue);
+        render_history(f, ram_history_area, app.ram_history.get(), "RAM History", Color::Green);
+        render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
         render_disk(f, disk_area, &app.data.disks);
-        render_disk_io(f, disk_io_area, &app.data.disk_io, &app.disk_read_history.get(), &app.disk_write_history.get());
+        render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
 
         render_bottom_widget(f, gol_area, app);
     }
@@ -707,7 +707,7 @@ mod tests {
         assert!(!app.ram_history.get().is_empty());
         
         // Values should be within valid ranges
-        for &cpu_val in &app.cpu_history.get() {
+        for &cpu_val in app.cpu_history.get() {
             assert!((0.0..=100.0).contains(&cpu_val));
         }
     }

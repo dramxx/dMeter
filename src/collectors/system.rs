@@ -345,13 +345,6 @@ impl SystemCollector {
         let upload_speed = total_tx.saturating_sub(*last_tx);
         let download_speed = total_rx.saturating_sub(*last_rx);
 
-        if *last_tx > 0 && total_tx < *last_tx / 2 {
-            log::warn!("Network TX counter reset detected, clamping to 0");
-        }
-        if *last_rx > 0 && total_rx < *last_rx / 2 {
-            log::warn!("Network RX counter reset detected, clamping to 0");
-        }
-
         let final_upload = if upload_speed > u64::MAX as u64 { 0 } else { upload_speed };
         let final_download = if download_speed > u64::MAX as u64 { 0 } else { download_speed };
 
@@ -637,7 +630,6 @@ fn get_cpu_temperature() -> Option<f32> {
         if let Ok(temp_millidegrees) = content.trim().parse::<i32>() {
             return Some(temp_millidegrees as f32 / 1000.0);
         }
-        log::warn!("Failed to parse CPU temperature from sysfs");
     }
 
     None
@@ -661,8 +653,6 @@ fn get_cpu_fan_speed() -> Option<u32> {
                     if rpm > 0 {
                         return Some(((rpm as f32 / 3000.0) * 100.0).min(100.0) as u32);
                     }
-                } else {
-                    log::warn!("Failed to parse fan speed from {}", fan_path);
                 }
             }
         }
@@ -688,8 +678,6 @@ fn get_cpu_power_draw() -> Option<f32> {
                 if let Ok(content) = fs::read_to_string(format!("{}/power1_input", base_path)) {
                     if let Ok(power_uw) = content.trim().parse::<u64>() {
                         return Some(power_uw as f32 / 1_000_000.0);
-                    } else {
-                        log::warn!("Failed to parse power from {}/power1_input", base_path);
                     }
                 }
             }

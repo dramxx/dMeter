@@ -26,9 +26,8 @@ pub fn collect_gpu_data() -> GpuData {
 
         match try_nvidia() {
             Ok(gpu) => return gpu,
-            Err(e) => {
-                log::warn!("GPU collection failed: {}, will retry on next collection", e);
-                NVIDIA_DRIVER_CHECKED.store(DRIVER_UNCHECKED, Ordering::Relaxed);
+            Err(_) => {
+                // Silently fall back to default
             }
         }
     }
@@ -37,8 +36,8 @@ pub fn collect_gpu_data() -> GpuData {
     {
         match try_nvidia() {
             Ok(gpu) => return gpu,
-            Err(e) => {
-                log::warn!("GPU collection failed: {}, will retry on next collection", e);
+            Err(_) => {
+                // Silently fall back to default
             }
         }
     }
@@ -167,8 +166,6 @@ fn try_nvidia() -> Result<GpuData, String> {
                     power_draw: None,
                 });
             }
-        } else {
-            log::warn!("nvidia-smi command failed with status: {}", output.status);
         }
     }
 

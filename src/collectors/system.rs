@@ -64,18 +64,17 @@ impl SystemCollector {
         
         let memory_thread_handle = thread::spawn(move || {
             loop {
-                // Check shutdown signal
                 if shutdown_clone.load(Ordering::Relaxed) {
                     break;
                 }
                 
                 let memory_info = crate::collectors::memory_info::collect_extended_memory_info();
                 if memory_tx.send(memory_info).is_err() {
-                    break; // Channel closed, exit thread
+                    break;
                 }
                 
                 // Sleep in small increments to check shutdown signal more frequently
-                for _ in 0..100 {
+                for _ in 0..20 {
                     if shutdown_clone.load(Ordering::Relaxed) {
                         break;
                     }
@@ -125,22 +124,40 @@ impl SystemCollector {
         let mut total_read = 0u64;
         let mut total_write = 0u64;
 
+        let sector_size = Self::get_sector_size_linux();
+
         if let Ok(content) = fs::read_to_string("/proc/diskstats") {
             for line in content.lines() {
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 if parts.len() >= 10 {
-                    // Format: major minor name read_ios read_merges read_sectors ... write_ios ... write_sectors
                     if let (Ok(read_sectors), Ok(write_sectors)) =
                         (parts[5].parse::<u64>(), parts[9].parse::<u64>())
                     {
-                        total_read += read_sectors * 512;
-                        total_write += write_sectors * 512;
+                        total_read += read_sectors * sector_size;
+                        total_write += write_sectors * sector_size;
                     }
                 }
             }
         }
 
         (total_read, total_write)
+    }
+
+    #[cfg(not(windows))]
+    fn get_sector_size_linux() -> u64 {
+        use std::fs;
+
+        let disk_names = ["sda", "nvme0n1", "vda", "sdb", "sdc"];
+        
+        for disk in disk_names.iter() {
+            let path = format!("/sys/block/{}/queue/hw_sector_size", disk);
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(size) = content.trim().parse::<u64>() {
+                    return size;
+                }
+            }
+        }
+        4096
     }
 
     #[cfg(windows)]
@@ -328,6 +345,16 @@ impl SystemCollector {
         let upload_speed = total_tx.saturating_sub(*last_tx);
         let download_speed = total_rx.saturating_sub(*last_rx);
 
+        if *last_tx > 0 && total_tx < *last_tx / 2 {
+            log::warn!("Network TX counter reset detected, clamping to 0");
+        }
+        if *last_rx > 0 && total_rx < *last_rx / 2 {
+            log::warn!("Network RX counter reset detected, clamping to 0");
+        }
+
+        let final_upload = if upload_speed > u64::MAX as u64 { 0 } else { upload_speed };
+        let final_download = if download_speed > u64::MAX as u64 { 0 } else { download_speed };
+
         *last_tx = total_tx;
         *last_rx = total_rx;
 
@@ -350,8 +377,8 @@ impl SystemCollector {
         NetworkData {
             adapter_name,
             ip_address,
-            upload_speed: upload_speed as f64,
-            download_speed: download_speed as f64,
+            upload_speed: final_upload as f64,
+            download_speed: final_download as f64,
         }
     }
 
@@ -606,11 +633,11 @@ fn get_cpu_power_draw() -> Option<f32> {
 fn get_cpu_temperature() -> Option<f32> {
     use std::fs;
 
-    // Try to read CPU temperature from sysfs on Linux
     if let Ok(content) = fs::read_to_string("/sys/class/thermal/thermal_zone0/temp") {
         if let Ok(temp_millidegrees) = content.trim().parse::<i32>() {
             return Some(temp_millidegrees as f32 / 1000.0);
         }
+        log::warn!("Failed to parse CPU temperature from sysfs");
     }
 
     None
@@ -621,24 +648,21 @@ fn get_cpu_fan_speed() -> Option<u32> {
     use std::fs;
     use std::path::Path;
 
-    // Try to read fan speed from hwmon
-    // Common paths: /sys/class/hwmon/hwmon*/fan*_input
     for hwmon_idx in 0..10 {
         let base_path = format!("/sys/class/hwmon/hwmon{}", hwmon_idx);
         if !Path::new(&base_path).exists() {
             continue;
         }
 
-        // Try fan1_input, fan2_input, etc.
         for fan_idx in 1..5 {
             let fan_path = format!("{}/fan{}_input", base_path, fan_idx);
             if let Ok(content) = fs::read_to_string(&fan_path) {
                 if let Ok(rpm) = content.trim().parse::<u32>() {
                     if rpm > 0 {
-                        // Convert RPM to percentage (assume max ~3000 RPM for CPU fans)
-                        let percentage = ((rpm as f32 / 3000.0) * 100.0).min(100.0) as u32;
-                        return Some(percentage);
+                        return Some(((rpm as f32 / 3000.0) * 100.0).min(100.0) as u32);
                     }
+                } else {
+                    log::warn!("Failed to parse fan speed from {}", fan_path);
                 }
             }
         }
@@ -652,35 +676,20 @@ fn get_cpu_power_draw() -> Option<f32> {
     use std::fs;
     use std::path::Path;
 
-    // Try to read CPU power from hwmon (RAPL - Running Average Power Limit)
-    // Path: /sys/class/hwmon/hwmon*/power*_input or /sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj
-    
-    // Try intel-rapl first (more accurate for Intel CPUs)
-    if let Ok(content) = fs::read_to_string("/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj") {
-        if let Ok(energy_uj) = content.trim().parse::<u64>() {
-            // This gives energy in microjoules, we'd need to track delta over time
-            // For now, we'll skip this approach and try hwmon power sensors
-            let _ = energy_uj; // Suppress unused warning
-        }
-    }
-
-    // Try hwmon power sensors
     for hwmon_idx in 0..10 {
         let base_path = format!("/sys/class/hwmon/hwmon{}", hwmon_idx);
         if !Path::new(&base_path).exists() {
             continue;
         }
 
-        // Check if this is a CPU power sensor by reading the name
         if let Ok(name) = fs::read_to_string(format!("{}/name", base_path)) {
             let name = name.trim().to_lowercase();
-            // Look for CPU-related power sensors
             if name.contains("coretemp") || name.contains("k10temp") || name.contains("cpu") {
-                // Try power1_input (power in microwatts)
                 if let Ok(content) = fs::read_to_string(format!("{}/power1_input", base_path)) {
                     if let Ok(power_uw) = content.trim().parse::<u64>() {
-                        // Convert microwatts to watts
                         return Some(power_uw as f32 / 1_000_000.0);
+                    } else {
+                        log::warn!("Failed to parse power from {}/power1_input", base_path);
                     }
                 }
             }

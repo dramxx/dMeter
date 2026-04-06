@@ -25,7 +25,8 @@ pub fn render_disk(f: &mut Frame, area: Rect, disks: &[DiskData]) {
         return;
     }
 
-    let disks: Vec<_> = disks.iter().take(3).collect();
+    let max_disks = inner.height as usize;
+    let disks: Vec<_> = disks.iter().take(max_disks).collect();
     let max_label_width = disks
         .iter()
         .map(|d| {

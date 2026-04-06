@@ -1,15 +1,24 @@
 use crate::state::GpuData;
 
 #[cfg(windows)]
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 #[cfg(windows)]
-static NVIDIA_DRIVER_CHECKED: OnceLock<bool> = OnceLock::new();
+static NVIDIA_DRIVER_CHECKED: AtomicU8 = AtomicU8::new(0);
+
+#[cfg(windows)]
+#[allow(dead_code)]
+const DRIVER_UNCHECKED: u8 = 0;
+#[cfg(windows)]
+#[allow(dead_code)]
+const DRIVER_PRESENT: u8 = 1;
+#[cfg(windows)]
+#[allow(dead_code)]
+const DRIVER_ABSENT: u8 = 2;
 
 pub fn collect_gpu_data() -> GpuData {
     #[cfg(windows)]
     {
-        // Quick check if NVIDIA driver might be present before attempting NVML init
         let driver_present = check_nvidia_driver_present();
         if !driver_present {
             return default_gpu_data();
@@ -17,8 +26,9 @@ pub fn collect_gpu_data() -> GpuData {
 
         match try_nvidia() {
             Ok(gpu) => return gpu,
-            Err(_) => {
-                // Silently fall back to default
+            Err(e) => {
+                log::warn!("GPU collection failed: {}, will retry on next collection", e);
+                NVIDIA_DRIVER_CHECKED.store(DRIVER_UNCHECKED, Ordering::Relaxed);
             }
         }
     }
@@ -27,8 +37,8 @@ pub fn collect_gpu_data() -> GpuData {
     {
         match try_nvidia() {
             Ok(gpu) => return gpu,
-            Err(_) => {
-                // Silently fall back to default
+            Err(e) => {
+                log::warn!("GPU collection failed: {}, will retry on next collection", e);
             }
         }
     }
@@ -51,14 +61,29 @@ fn default_gpu_data() -> GpuData {
 
 #[cfg(windows)]
 fn check_nvidia_driver_present() -> bool {
-    *NVIDIA_DRIVER_CHECKED.get_or_init(|| {
-        let possible_paths = [
-            std::path::Path::new(r"C:\Windows\System32\nvml.dll"),
-            std::path::Path::new(r"C:\Windows\SysWOW64\nvml.dll"),
-        ];
+    let current = NVIDIA_DRIVER_CHECKED.load(Ordering::Relaxed);
+    
+    if current == DRIVER_PRESENT {
+        return true;
+    }
+    if current == DRIVER_ABSENT {
+        return false;
+    }
 
-        possible_paths.iter().any(|p| p.exists())
-    })
+    let possible_paths = [
+        std::path::Path::new(r"C:\Windows\System32\nvml.dll"),
+        std::path::Path::new(r"C:\Windows\SysWOW64\nvml.dll"),
+    ];
+
+    let present = possible_paths.iter().any(|p| p.exists());
+    
+    if present {
+        NVIDIA_DRIVER_CHECKED.store(DRIVER_PRESENT, Ordering::Relaxed);
+    } else {
+        NVIDIA_DRIVER_CHECKED.store(DRIVER_ABSENT, Ordering::Relaxed);
+    }
+    
+    present
 }
 
 #[cfg(windows)]
@@ -112,7 +137,6 @@ fn try_nvidia() -> Result<GpuData, String> {
     use std::fs;
     use std::process::Command;
 
-    // Try nvidia-smi command (most reliable on Linux)
     let output = Command::new("nvidia-smi")
         .args(&[
             "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu",
@@ -128,7 +152,7 @@ fn try_nvidia() -> Result<GpuData, String> {
             if parts.len() >= 5 {
                 let name = parts[0].to_string();
                 let usage = parts[1].parse::<f32>().unwrap_or(0.0);
-                let memory_used = parts[2].parse::<u64>().unwrap_or(0) * 1024 * 1024; // MB to bytes
+                let memory_used = parts[2].parse::<u64>().unwrap_or(0) * 1024 * 1024;
                 let memory_total = parts[3].parse::<u64>().unwrap_or(0) * 1024 * 1024;
                 let temperature = parts[4].parse::<f32>().ok();
 
@@ -143,24 +167,56 @@ fn try_nvidia() -> Result<GpuData, String> {
                     power_draw: None,
                 });
             }
+        } else {
+            log::warn!("nvidia-smi command failed with status: {}", output.status);
         }
     }
 
-    // Fallback: Try reading from sysfs (AMD/Intel)
     if let Ok(name) = fs::read_to_string("/sys/class/drm/card0/device/product_name") {
+        let name = name.trim().to_string();
+        let temperature = read_amdgpu_temp();
+        let memory_total = read_amdgpu_memory_total();
+        
         return Ok(GpuData {
             available: true,
-            name: name.trim().to_string(),
+            name,
             usage: 0.0,
             memory_used: 0,
-            memory_total: 0,
-            temperature: None,
+            memory_total,
+            temperature,
             fan_speed: None,
             power_draw: None,
         });
     }
 
     Err("No GPU detected on Linux".to_string())
+}
+
+#[cfg(not(windows))]
+fn read_amdgpu_temp() -> Option<f32> {
+    use std::fs;
+    
+    for hwmon_idx in 0..10 {
+        let temp_path = format!("/sys/class/hwmon/hwmon{}/temp1_input", hwmon_idx);
+        if let Ok(content) = fs::read_to_string(&temp_path) {
+            if let Ok(temp_millidegrees) = content.trim().parse::<i32>() {
+                return Some(temp_millidegrees as f32 / 1000.0);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn read_amdgpu_memory_total() -> u64 {
+    use std::fs;
+    
+    if let Ok(content) = fs::read_to_string("/sys/class/drm/card0/device/mem_info_vram_total") {
+        if let Ok(bytes) = content.trim().parse::<u64>() {
+            return bytes;
+        }
+    }
+    0
 }
 
 #[cfg(test)]

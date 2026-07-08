@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $staging = "dmeter-$version-windows-x64"
+          New-Item -ItemType Directory -Path $staging | Out-Null
+          Copy-Item target/release/dmeter.exe $staging/
+          Copy-Item README.md $staging/
+          Copy-Item LICENSE $staging/
+          Compress-Archive -Path $staging/* -DestinationPath "$staging.zip"
+          (Get-FileHash "$staging.zip" -Algorithm SHA256).Hash | Out-File "$staging.zip.sha256" -NoNewline
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dmeter-*-windows-x64.zip
+            dmeter-*-windows-x64.zip.sha256
+          generate_release_notes: true

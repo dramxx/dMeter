@@ -31,8 +31,10 @@ A fast, beautiful terminal system monitor built with Rust and Ratatui, featuring
 ### Windows (winget)
 
 ```powershell
-winget install dMeter
+winget install dramxx.dMeter
 ```
+
+> Not yet published — see [RELEASING.md](RELEASING.md) for the submission steps.
 
 ### From Source
 

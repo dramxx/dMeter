@@ -1,48 +1,32 @@
 use crate::state::GpuData;
 
-#[cfg(windows)]
-use std::sync::atomic::{AtomicU8, Ordering};
-
-#[cfg(windows)]
-static NVIDIA_DRIVER_CHECKED: AtomicU8 = AtomicU8::new(0);
-
-#[cfg(windows)]
-#[allow(dead_code)]
-const DRIVER_UNCHECKED: u8 = 0;
-#[cfg(windows)]
-#[allow(dead_code)]
-const DRIVER_PRESENT: u8 = 1;
-#[cfg(windows)]
-#[allow(dead_code)]
-const DRIVER_ABSENT: u8 = 2;
-
-pub fn collect_gpu_data() -> GpuData {
+/// Holds the NVML handle so the library is loaded once instead of on every collection.
+pub struct GpuCollector {
     #[cfg(windows)]
-    {
-        let driver_present = check_nvidia_driver_present();
-        if !driver_present {
-            return default_gpu_data();
-        }
+    nvml: Option<nvml_wrapper::Nvml>,
+}
 
-        match try_nvidia() {
-            Ok(gpu) => return gpu,
-            Err(_) => {
-                // Silently fall back to default
-            }
+impl GpuCollector {
+    pub fn new() -> Self {
+        Self {
+            // Fails gracefully (no nvml.dll) on machines without an NVIDIA driver
+            #[cfg(windows)]
+            nvml: nvml_wrapper::Nvml::init().ok(),
         }
     }
 
-    #[cfg(not(windows))]
-    {
-        match try_nvidia() {
-            Ok(gpu) => return gpu,
-            Err(_) => {
-                // Silently fall back to default
-            }
-        }
-    }
+    pub fn collect(&self) -> GpuData {
+        #[cfg(windows)]
+        let result = match &self.nvml {
+            Some(nvml) => try_nvidia(nvml),
+            None => Err("NVML not available".to_string()),
+        };
 
-    default_gpu_data()
+        #[cfg(not(windows))]
+        let result = try_nvidia();
+
+        result.unwrap_or_else(|_| default_gpu_data())
+    }
 }
 
 fn default_gpu_data() -> GpuData {
@@ -59,37 +43,7 @@ fn default_gpu_data() -> GpuData {
 }
 
 #[cfg(windows)]
-fn check_nvidia_driver_present() -> bool {
-    let current = NVIDIA_DRIVER_CHECKED.load(Ordering::Relaxed);
-    
-    if current == DRIVER_PRESENT {
-        return true;
-    }
-    if current == DRIVER_ABSENT {
-        return false;
-    }
-
-    let possible_paths = [
-        std::path::Path::new(r"C:\Windows\System32\nvml.dll"),
-        std::path::Path::new(r"C:\Windows\SysWOW64\nvml.dll"),
-    ];
-
-    let present = possible_paths.iter().any(|p| p.exists());
-    
-    if present {
-        NVIDIA_DRIVER_CHECKED.store(DRIVER_PRESENT, Ordering::Relaxed);
-    } else {
-        NVIDIA_DRIVER_CHECKED.store(DRIVER_ABSENT, Ordering::Relaxed);
-    }
-    
-    present
-}
-
-#[cfg(windows)]
-fn try_nvidia() -> Result<GpuData, String> {
-    use nvml_wrapper::Nvml;
-
-    let nvml = Nvml::init().map_err(|e| format!("NVML init failed: {}", e))?;
+fn try_nvidia(nvml: &nvml_wrapper::Nvml) -> Result<GpuData, String> {
     let device = nvml
         .device_by_index(0)
         .map_err(|e| format!("No GPU found: {}", e))?;
@@ -223,7 +177,7 @@ mod tests {
     #[test]
     fn test_collect_gpu_data_no_crash() {
         // Should not panic even if no GPU is present
-        let gpu_data = collect_gpu_data();
+        let gpu_data = GpuCollector::new().collect();
         
         // Should return valid GpuData struct
         assert!(gpu_data.usage >= 0.0);
@@ -247,7 +201,7 @@ mod tests {
 
     #[test]
     fn test_gpu_data_available_flag() {
-        let gpu_data = collect_gpu_data();
+        let gpu_data = GpuCollector::new().collect();
         
         // If GPU is not available, all optional fields should be None or 0
         if !gpu_data.available {
@@ -264,15 +218,16 @@ mod tests {
     #[test]
     fn test_multiple_gpu_collections() {
         // Collect GPU data multiple times - should not crash or leak
+        let collector = GpuCollector::new();
         for _ in 0..10 {
-            let gpu_data = collect_gpu_data();
+            let gpu_data = collector.collect();
             assert!(gpu_data.usage >= 0.0);
         }
     }
 
     #[test]
     fn test_gpu_data_memory_consistency() {
-        let gpu_data = collect_gpu_data();
+        let gpu_data = GpuCollector::new().collect();
         
         // Memory used should never exceed memory total
         assert!(gpu_data.memory_used <= gpu_data.memory_total);
@@ -284,22 +239,9 @@ mod tests {
         }
     }
 
-    #[cfg(windows)]
-    #[test]
-    fn test_nvidia_driver_check_caching() {
-        // First call
-        let result1 = check_nvidia_driver_present();
-        
-        // Second call should return cached result
-        let result2 = check_nvidia_driver_present();
-        
-        // Results should be consistent
-        assert_eq!(result1, result2);
-    }
-
     #[test]
     fn test_gpu_optional_fields() {
-        let gpu_data = collect_gpu_data();
+        let gpu_data = GpuCollector::new().collect();
         
         // Optional fields should be None if GPU is not available
         if !gpu_data.available {

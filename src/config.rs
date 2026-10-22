@@ -4,14 +4,16 @@ use std::path::PathBuf;
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "dmeter")]
-#[command(version = "0.1.0")]
+#[command(version)]
 #[command(about = "A fast, beautiful terminal system monitor", long_about = None)]
 pub struct CliArgs {
-    #[arg(short, long, default_value_t = 2, help = "Refresh interval in seconds")]
-    pub interval: u64,
+    /// Refresh interval in seconds [default: 2, or the value in config.toml]
+    #[arg(short, long, value_parser = clap::value_parser!(u64).range(1..))]
+    pub interval: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub interval: u64,
 }
@@ -32,9 +34,9 @@ impl Config {
             match std::fs::read_to_string(&config_path) {
                 Ok(contents) => match toml::from_str(&contents) {
                     Ok(config) => return config,
-                    Err(e) => log::warn!("Failed to parse config: {}", e),
+                    Err(e) => eprintln!("dmeter: failed to parse {}: {}", config_path.display(), e),
                 },
-                Err(e) => log::warn!("Failed to read config: {}", e),
+                Err(e) => eprintln!("dmeter: failed to read {}: {}", config_path.display(), e),
             }
         }
 
@@ -49,7 +51,11 @@ impl Config {
     }
 
     pub fn merge_cli(&mut self, cli: &CliArgs) {
-        self.interval = cli.interval;
+        if let Some(interval) = cli.interval {
+            self.interval = interval;
+        }
+        // An interval of 0 would make the collector loop without sleeping
+        self.interval = self.interval.max(1);
     }
 }
 
@@ -59,8 +65,27 @@ mod tests {
 
     #[test]
     fn test_cli_args_defaults() {
-        let args = CliArgs { interval: 2 };
-        assert_eq!(args.interval, 2);
+        let args = CliArgs::parse_from(["dmeter"]);
+        assert_eq!(args.interval, None);
+    }
+
+    #[test]
+    fn test_cli_rejects_zero_interval() {
+        assert!(CliArgs::try_parse_from(["dmeter", "-i", "0"]).is_err());
+    }
+
+    #[test]
+    fn test_config_file_interval_kept_without_cli() {
+        let mut config: Config = toml::from_str("interval = 7").unwrap();
+        config.merge_cli(&CliArgs { interval: None });
+        assert_eq!(config.interval, 7);
+    }
+
+    #[test]
+    fn test_config_zero_interval_clamped() {
+        let mut config: Config = toml::from_str("interval = 0").unwrap();
+        config.merge_cli(&CliArgs { interval: None });
+        assert_eq!(config.interval, 1);
     }
 
     #[test]
@@ -72,7 +97,7 @@ mod tests {
     #[test]
     fn test_config_merge_cli() {
         let mut config = Config::default();
-        let cli = CliArgs { interval: 5 };
+        let cli = CliArgs { interval: Some(5) };
         
         config.merge_cli(&cli);
         
@@ -92,13 +117,9 @@ interval = 3
 
     #[test]
     fn test_config_partial_toml() {
-        let partial_toml = r#"
-interval = 4
-"#;
-        
-        let config: Config = toml::from_str(partial_toml).unwrap();
-        
-        assert_eq!(config.interval, 4);
+        let config: Config = toml::from_str("").unwrap();
+
+        assert_eq!(config.interval, 2);
     }
 
     #[test]

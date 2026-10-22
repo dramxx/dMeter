@@ -1,10 +1,11 @@
 use crate::state::NetworkData;
-use crate::utils::{format_bytes_per_sec, render_sparkline};
+use crate::ui::layout::render_rate_line;
+use crate::utils::format_bytes_per_sec;
 use ratatui::{
     layout::Rect,
-    style::Style,
-    text::Span,
-    widgets::{Block, Borders, Paragraph},
+    style::{Color, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders},
     Frame,
 };
 
@@ -19,67 +20,48 @@ pub fn render_network(
         return;
     }
 
+    // Adapter info lives in the title so both directions get their own row
+    let title = if data.adapter_name.is_empty() {
+        " NETWORK ".to_string()
+    } else {
+        format!(" NETWORK · {} · {} ", data.adapter_name, data.ip_address)
+    };
+
     let block = Block::default()
-        .title(" NETWORK ")
+        .title(title)
         .borders(Borders::ALL)
         .border_style(Style::default().fg(crate::ui::colors::Colors::border()));
 
     f.render_widget(block, area);
 
     let inner = crate::ui::layout::safe_inner(area, 1);
-    if inner.width < 4 {
+    if inner.width < 4 || inner.height < 1 {
         return;
     }
 
-    let mut y = inner.y;
+    // Fixed-width speeds keep the sparkline from jittering as the numbers change
+    let down = Span::styled(
+        format!("{:>11}", format_bytes_per_sec(data.download_speed)),
+        Style::default().fg(Color::Cyan),
+    );
+    let up = Span::styled(
+        format!("{:>11}", format_bytes_per_sec(data.upload_speed)),
+        Style::default().fg(Color::Green),
+    );
+    let label = |arrow: &'static str| Span::styled(arrow, Style::default().fg(Color::White));
 
-    let up_speed = format_bytes_per_sec(data.upload_speed);
-    let down_speed = format_bytes_per_sec(data.download_speed);
+    let row = |offset: u16| Rect::new(inner.x, inner.y + offset, inner.width, 1);
 
-    // Calculate responsive sparkline width
-    let text_content = format!("  ↑ {} | ↓ {}", up_speed, down_speed);
-    let text_width = text_content.len() as u16 + 2;
-    let sparkline_width = (inner.width.saturating_sub(text_width) as usize).max(20);
-
-    // Render sparkline on the left with adaptive scaling
-    if !rx_history.is_empty() && !tx_history.is_empty() {
-        let combined_sparkline = render_sparkline(rx_history, sparkline_width);
-        f.render_widget(
-            Paragraph::new(Span::raw(combined_sparkline))
-                .style(Style::default().fg(ratatui::style::Color::Green)),
-            Rect::new(inner.x, y, sparkline_width as u16, 1),
+    if inner.height >= 2 {
+        render_rate_line(f, row(0), rx_history, Color::Cyan, Line::from(vec![label("↓ "), down]));
+        render_rate_line(f, row(1), tx_history, Color::Green, Line::from(vec![label("↑ "), up]));
+    } else {
+        render_rate_line(
+            f,
+            row(0),
+            rx_history,
+            Color::Cyan,
+            Line::from(vec![label("↓ "), down, label(" ↑ "), up]),
         );
     }
-
-    // Render network text on the right (after sparkline)
-    use ratatui::text::Line;
-    let network_text = Line::from(vec![
-        Span::styled("  ↑ ", Style::default().fg(ratatui::style::Color::White)),
-        Span::styled(up_speed, Style::default().fg(ratatui::style::Color::Green)),
-        Span::styled(" | ↓ ", Style::default().fg(ratatui::style::Color::White)),
-        Span::styled(down_speed, Style::default().fg(ratatui::style::Color::Cyan)),
-    ]);
-    f.render_widget(
-        Paragraph::new(network_text),
-        Rect::new(
-            inner.x + sparkline_width as u16,
-            y,
-            inner.width.saturating_sub(sparkline_width as u16),
-            1,
-        ),
-    );
-    y = y.saturating_add(1);
-
-    // Render adapter info below
-    let adapter_info = if data.adapter_name.is_empty() {
-        "No adapter".to_string()
-    } else {
-        format!("{} · {}", data.adapter_name, data.ip_address)
-    };
-
-    f.render_widget(
-        Paragraph::new(Span::raw(adapter_info))
-            .style(Style::default().fg(ratatui::style::Color::White)),
-        Rect::new(inner.x, y, inner.width, 1),
-    );
 }

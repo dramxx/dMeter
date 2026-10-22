@@ -1,10 +1,11 @@
 use crate::state::DiskIOData;
-use crate::utils::{format_bytes_per_sec, render_sparkline};
+use crate::ui::layout::render_rate_line;
+use crate::utils::format_bytes_per_sec;
 use ratatui::{
     layout::Rect,
-    style::Style,
+    style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders},
     Frame,
 };
 
@@ -27,49 +28,33 @@ pub fn render_disk_io(
     f.render_widget(block, area);
 
     let inner = crate::ui::layout::safe_inner(area, 1);
-    if inner.width < 4 {
+    if inner.width < 4 || inner.height < 1 {
         return;
     }
 
-    let read_speed = format_bytes_per_sec(data.read_speed);
-    let write_speed = format_bytes_per_sec(data.write_speed);
+    // Fixed-width speeds keep the sparkline from jittering as the numbers change
+    let read = Span::styled(
+        format!("{:>11}", format_bytes_per_sec(data.read_speed)),
+        Style::default().fg(Color::Blue),
+    );
+    let write = Span::styled(
+        format!("{:>11}", format_bytes_per_sec(data.write_speed)),
+        Style::default().fg(Color::Yellow),
+    );
+    let label = |text: &'static str| Span::styled(text, Style::default().fg(Color::White));
 
-    // Calculate responsive sparkline width
-    let text_content = format!("  Read {} | Write {}", read_speed, write_speed);
-    let text_width = text_content.len() as u16 + 2;
-    let sparkline_width = (inner.width.saturating_sub(text_width) as usize).max(20);
+    let row = |offset: u16| Rect::new(inner.x, inner.y + offset, inner.width, 1);
 
-    // Render sparkline on the left with adaptive scaling
-    if !read_history.is_empty() && !write_history.is_empty() {
-        let combined_sparkline = render_sparkline(read_history, sparkline_width);
-        f.render_widget(
-            Paragraph::new(Span::raw(combined_sparkline))
-                .style(Style::default().fg(ratatui::style::Color::Green)),
-            Rect::new(inner.x, inner.y, sparkline_width as u16, 1),
+    if inner.height >= 2 {
+        render_rate_line(f, row(0), read_history, Color::Blue, Line::from(vec![label("Read  "), read]));
+        render_rate_line(f, row(1), write_history, Color::Yellow, Line::from(vec![label("Write "), write]));
+    } else {
+        render_rate_line(
+            f,
+            row(0),
+            read_history,
+            Color::Blue,
+            Line::from(vec![label("R "), read, label(" W "), write]),
         );
     }
-
-    // Render disk I/O text on the right (after sparkline)
-    let io_text = Line::from(vec![
-        Span::styled("  Read ", Style::default().fg(ratatui::style::Color::White)),
-        Span::styled(read_speed, Style::default().fg(ratatui::style::Color::Blue)),
-        Span::styled(
-            " | Write ",
-            Style::default().fg(ratatui::style::Color::White),
-        ),
-        Span::styled(
-            write_speed,
-            Style::default().fg(ratatui::style::Color::Yellow),
-        ),
-    ]);
-
-    f.render_widget(
-        Paragraph::new(io_text),
-        Rect::new(
-            inner.x + sparkline_width as u16,
-            inner.y,
-            inner.width.saturating_sub(sparkline_width as u16),
-            1,
-        ),
-    );
 }

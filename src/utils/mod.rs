@@ -74,27 +74,18 @@ pub fn render_bar(percent: f32, width: usize) -> String {
 }
 
 pub fn render_sparkline(data: &[f32], width: usize) -> String {
-    if data.is_empty() || width == 0 {
-        return "░".repeat(width);
-    }
+    // Newest sample sits at the right edge; older samples scroll off to the left
+    let visible = &data[data.len().saturating_sub(width)..];
 
     // Use fixed scale from 0 to max to prevent visual jumps during buffer fill
-    let max = data.iter().cloned().fold(0.0f32, f32::max).max(1.0); // Minimum max of 1.0
+    let max = visible.iter().cloned().fold(0.0f32, f32::max).max(1.0); // Minimum max of 1.0
 
     let chars = ['░', '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
-    let step = if data.len() > width {
-        data.len() / width
-    } else {
-        1
-    };
+    // Pad on the left when the history is shorter than the available width
+    let mut result = "░".repeat(width - visible.len());
 
-    let mut result = String::new();
-
-    for i in 0..width {
-        let idx = (i * step).min(data.len() - 1);
-        let value = data[idx];
-
+    for &value in visible {
         // Normalize from 0 to max (fixed scale)
         let normalized = (value / max).clamp(0.0, 1.0);
 
@@ -175,6 +166,16 @@ mod tests {
         assert_eq!(sparkline.chars().count(), 3);
         assert!(sparkline.contains('░'));
         assert!(sparkline.contains('█'));
+    }
+
+    #[test]
+    fn test_render_sparkline_keeps_newest_samples() {
+        // Narrower than the history: the newest sample must be the rightmost char
+        let data = [0.0, 0.0, 0.0, 0.0, 100.0];
+        assert_eq!(render_sparkline(&data, 2), "░█");
+
+        // Wider than the history: pad on the left, newest still at the right edge
+        assert_eq!(render_sparkline(&[100.0], 3), "░░█");
     }
 
     #[test]

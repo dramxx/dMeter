@@ -71,7 +71,6 @@ pub fn render_system_info(f: &mut Frame, area: Rect, data: &SystemData) {
     }
 }
 
-#[allow(dead_code)]
 pub fn render_minimum_size_warning(f: &mut Frame, area: Rect) {
     let text = "Terminal too small. Please resize to at least 80x24.";
 

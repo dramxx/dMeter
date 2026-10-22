@@ -10,7 +10,8 @@
    ```
 3. The `Release` workflow (`.github/workflows/release.yml`) builds `dmeter.exe`,
    zips it as `dmeter-<version>-windows-x64.zip`, and publishes a GitHub Release
-   with the zip and its `.sha256` attached.
+   with the zip and its `.sha256` attached. The workflow fails if the tag
+   doesn't match the `Cargo.toml` version, or if tests fail.
 
 ## Publish/update on winget
 
@@ -36,6 +37,8 @@ GitHub Release asset from the step above.
    wingetcreate update dramxx.dMeter --version 0.1.1 --urls https://github.com/dramxx/dMeter/releases/download/v0.1.1/dmeter-0.1.1-windows-x64.zip --submit
    ```
 
+   Add `--out manifests` to also keep a copy of the generated manifests under
+   `manifests/` in this repo.
+
 Once the PR is merged (Microsoft runs automated validation, usually
-same-day), `winget install dramxx.dMeter` works for everyone. Until then,
-the `winget install dMeter` line in the README is aspirational.
+same-day), `winget upgrade dramxx.dMeter` picks up the new version.

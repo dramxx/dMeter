@@ -9,9 +9,7 @@ use ratatui::crossterm::{
     execute,
     terminal::{Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
-
-#[cfg(not(windows))]
-use ratatui::crossterm::terminal::{enable_raw_mode, disable_raw_mode};
+use ratatui::crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::{backend::CrosstermBackend, prelude::*, widgets::*, Frame, Terminal};
 
 use crate::collectors::SystemCollector;
@@ -19,7 +17,8 @@ use crate::config::CliArgs;
 use crate::state::{HistoryBuffer, SystemData};
 use crate::ui::{
     get_display_mode, render_cpu, render_disk, render_disk_io, render_gpu, render_header,
-    render_memory, render_network, render_processes, render_system_info, GameOfLife,
+    render_memory, render_minimum_size_warning, render_network, render_processes,
+    render_system_info, GameOfLife,
 };
 use clap::Parser;
 
@@ -60,11 +59,7 @@ impl Drop for App {
 }
 
 impl App {
-    fn new(cli: CliArgs) -> Self {
-        let mut config = crate::config::Config::load();
-        config.merge_cli(&cli);
-        let interval = config.interval;
-
+    fn new(interval: u64) -> Self {
         let mut collector = SystemCollector::new();
 
         // Initial synchronous collection so we have data immediately
@@ -173,7 +168,6 @@ fn main() -> io::Result<()> {
 
     if let Err(e) = result {
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
-        #[cfg(not(windows))]
         let _ = disable_raw_mode();
         if let Some(s) = e.downcast_ref::<&str>() {
             eprintln!("\n\nPANIC: {}\n", s);
@@ -189,9 +183,11 @@ fn main() -> io::Result<()> {
 }
 
 fn main_inner() -> io::Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-
     let cli = CliArgs::parse();
+
+    // Load config before entering the alternate screen so any warning stays visible
+    let mut config = crate::config::Config::load();
+    config.merge_cli(&cli);
 
     let running = Arc::new(AtomicBool::new(true));
 
@@ -205,10 +201,9 @@ fn main_inner() -> io::Result<()> {
     let mut terminal = Terminal::new(backend)?;
     terminal.hide_cursor()?;
 
-    #[cfg(not(windows))]
     let _ = enable_raw_mode();
 
-    let mut app = App::new(cli);
+    let mut app = App::new(config.interval);
 
     if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         app.update();
@@ -278,11 +273,13 @@ fn main_inner() -> io::Result<()> {
             let size = terminal.size()?;
             let mode = get_display_mode(size.height);
 
-            if size.width >= 80 && size.height >= 24 {
-                terminal.draw(|f| {
+            terminal.draw(|f| {
+                if size.width >= 80 && size.height >= 24 {
                     render_ui(f, &mut app, mode);
-                })?;
-            }
+                } else {
+                    render_minimum_size_warning(f, f.area());
+                }
+            })?;
             last_render = std::time::Instant::now();
         }
     }
@@ -290,7 +287,6 @@ fn main_inner() -> io::Result<()> {
     execute!(io::stdout(), LeaveAlternateScreen,)?;
     terminal.show_cursor()?;
 
-    #[cfg(not(windows))]
     let _ = disable_raw_mode();
 
     Ok(())
@@ -382,24 +378,15 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
         );
 
         let network_y = gpu_history_y + history_height;
-        let net_area = Rect::new(
-            area.x,
-            network_y,
-            col1_width,
-            area.height - panel_height - (history_height * 2) - 1,
-        );
-        let disk_area = Rect::new(
-            area.x + col1_width,
-            network_y,
-            col2_width,
-            area.height - panel_height - (history_height * 2) - 1,
-        );
-        let disk_io_area = Rect::new(
-            area.x + col1_width + col2_width,
-            network_y,
-            col3_width,
-            area.height - panel_height - (history_height * 2) - 1,
-        );
+        let bottom_height = 4u16;
+        let net_area = Rect::new(area.x, network_y, col1_width, bottom_height);
+        let disk_area = Rect::new(area.x + col1_width, network_y, col2_width, bottom_height);
+        let disk_io_area = Rect::new(area.x + col1_width + col2_width, network_y, col3_width, bottom_height);
+
+        // Game of Life / processes fill whatever height is left
+        let gol_y = network_y + bottom_height;
+        let gol_height = area.height.saturating_sub(panel_height + (history_height * 2) + bottom_height);
+        let gol_area = Rect::new(area.x, gol_y, area.width, gol_height);
 
         render_cpu(f, cpu_area, &app.data.cpu, crate::ui::DisplayMode::Compact, app.cpu_history.get());
         render_gpu(f, gpu_area, &app.data.gpu);
@@ -411,6 +398,8 @@ fn render_compact_mode(f: &mut Frame, area: Rect, app: &mut App) {
         render_network(f, net_area, &app.data.network, app.network_rx_history.get(), app.network_tx_history.get());
         render_disk(f, disk_area, &app.data.disks);
         render_disk_io(f, disk_io_area, &app.data.disk_io, app.disk_read_history.get(), app.disk_write_history.get());
+
+        render_bottom_widget(f, gol_area, app);
     } else {
         let col_width = area.width / 2;
 
@@ -641,8 +630,7 @@ mod tests {
     #[test]
     fn test_app_creation() {
         // App should be created without panicking
-        let cli = CliArgs { interval: 2 };
-        let app = App::new(cli);
+        let app = App::new(2);
         
         // Verify app was created successfully
         assert_eq!(app.interval, 2);
@@ -654,8 +642,7 @@ mod tests {
 
     #[test]
     fn test_app_update_no_crash() {
-        let cli = CliArgs { interval: 2 };
-        let mut app = App::new(cli);
+        let mut app = App::new(2);
         
         // Update should not crash even without GPU
         app.update();
@@ -667,8 +654,7 @@ mod tests {
 
     #[test]
     fn test_app_update_multiple_times() {
-        let cli = CliArgs { interval: 2 };
-        let mut app = App::new(cli);
+        let mut app = App::new(2);
         
         // Update multiple times - should not leak memory or crash
         for _ in 0..10 {
@@ -679,8 +665,7 @@ mod tests {
 
     #[test]
     fn test_app_with_no_gpu() {
-        let cli = CliArgs { interval: 2 };
-        let mut app = App::new(cli);
+        let mut app = App::new(2);
         app.update();
         
         // If no GPU, should have default values
@@ -696,8 +681,7 @@ mod tests {
 
     #[test]
     fn test_app_history_buffers() {
-        let cli = CliArgs { interval: 2 };
-        let mut app = App::new(cli);
+        let mut app = App::new(2);
         
         // Update to populate history
         app.update();
@@ -716,8 +700,7 @@ mod tests {
     fn test_app_cleanup() {
         // Create and drop app multiple times
         for _ in 0..5 {
-            let cli = CliArgs { interval: 2 };
-            let mut app = App::new(cli);
+            let mut app = App::new(2);
             app.update();
             drop(app);
         }
@@ -727,8 +710,7 @@ mod tests {
 
     #[test]
     fn test_has_gpu_function() {
-        let cli = CliArgs { interval: 2 };
-        let mut app = App::new(cli);
+        let mut app = App::new(2);
         app.update();
         
         let has_gpu_result = has_gpu(&app);
@@ -739,8 +721,7 @@ mod tests {
 
     #[test]
     fn test_app_data_consistency() {
-        let cli = CliArgs { interval: 2 };
-        let mut app = App::new(cli);
+        let mut app = App::new(2);
         app.update();
         
         // CPU usage should be valid
@@ -759,8 +740,7 @@ mod tests {
 
     #[test]
     fn test_app_game_of_life_initialization() {
-        let cli = CliArgs { interval: 2 };
-        let app = App::new(cli);
+        let app = App::new(2);
         
         // Game of Life should be None initially
         assert!(app.gol.is_none());
@@ -768,8 +748,7 @@ mod tests {
 
     #[test]
     fn test_app_process_toggle() {
-        let cli = CliArgs { interval: 2 };
-        let mut app = App::new(cli);
+        let mut app = App::new(2);
         
         // Should start with Game of Life (show_processes = false)
         assert!(!app.show_processes);
@@ -785,8 +764,7 @@ mod tests {
 
     #[test]
     fn test_app_process_data_collection() {
-        let cli = CliArgs { interval: 2 };
-        let mut app = App::new(cli);
+        let mut app = App::new(2);
         
         // Enable process widget to trigger process collection
         app.show_processes = true;
@@ -808,8 +786,7 @@ mod tests {
 
     #[test]
     fn test_app_process_data_validity() {
-        let cli = CliArgs { interval: 2 };
-        let mut app = App::new(cli);
+        let mut app = App::new(2);
         
         // Enable process widget to trigger process collection
         app.show_processes = true;
@@ -826,8 +803,7 @@ mod tests {
 
     #[test]
     fn test_app_gol_restart() {
-        let cli = CliArgs { interval: 2 };
-        let mut app = App::new(cli);
+        let mut app = App::new(2);
         
         // Initially GoL should be None
         assert!(app.gol.is_none());

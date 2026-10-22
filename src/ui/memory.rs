@@ -80,34 +80,15 @@ pub fn render_memory(f: &mut Frame, area: Rect, data: &MemoryData, show_swap: bo
     // Add empty row for spacing
     y = y.saturating_add(1);
 
-    // Display Commit and Cached memory or loading indicator
-    if data.commit_total > 0 || data.cached > 0 {
-        let commit_used = format_bytes(data.commit_total - data.commit_used);
-        let _commit_total = format_bytes(data.commit_total);
+    // Display Commit and Cached memory (Windows only)
+    if data.commit_total > 0 {
+        let commit_used = format_bytes(data.commit_used);
         let cached = format_bytes(data.cached);
 
         f.render_widget(
             Paragraph::new(Span::raw(format!(
                 "Commit {}  Cached {}",
                 commit_used, cached
-            )))
-            .style(Style::default().fg(ratatui::style::Color::Cyan)),
-            Rect::new(inner.x, y, inner.width, 1),
-        );
-    } else {
-        // Show loading indicator while memory data is being collected
-        let loading_chars = ["|", "/", "-", "\\"];
-        let loading_index = (std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis()
-            / 250) as usize
-            % 4; // Rotate every 250ms
-
-        f.render_widget(
-            Paragraph::new(Span::raw(format!(
-                "Loading memory info {}",
-                loading_chars[loading_index]
             )))
             .style(Style::default().fg(ratatui::style::Color::Cyan)),
             Rect::new(inner.x, y, inner.width, 1),

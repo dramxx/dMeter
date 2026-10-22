@@ -21,7 +21,7 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData) {
     f.render_widget(block, area);
 
     let inner = crate::ui::layout::safe_inner(area, 1);
-    if inner.width < 4 || inner.height < 4 {
+    if inner.width < 4 || inner.height < 1 {
         return;
     }
 
@@ -44,6 +44,10 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData) {
         Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
+    // Compact mode only has room for the first rows
+    if y >= inner.bottom() {
+        return;
+    }
 
     // Calculate GPU bar width dynamically based on text content
     let gpu_text_content = format!("GPU  [] {:.1}%", data.usage);
@@ -57,6 +61,9 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData) {
         Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
+    if y >= inner.bottom() {
+        return;
+    }
 
     let mem_percent = if data.memory_total > 0 {
         (data.memory_used as f32 / data.memory_total as f32) * 100.0
@@ -81,6 +88,9 @@ pub fn render_gpu(f: &mut Frame, area: Rect, data: &GpuData) {
         Rect::new(inner.x, y, inner.width, 1),
     );
     y = y.saturating_add(1);
+    if y >= inner.bottom() {
+        return;
+    }
 
     if let Some(temp) = data.temperature {
         let temp_color = get_temp_color(temp);

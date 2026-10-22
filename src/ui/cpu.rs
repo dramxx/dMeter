@@ -31,12 +31,11 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, _mode: DisplayMode,
     let color = get_usage_color(data.usage);
 
     let cpu_name = data.name.trim();
-    let freq = format_frequency(data.frequency);
 
     let mut y = inner.y;
 
     f.render_widget(
-        Paragraph::new(Span::raw(format!("{} {}", cpu_name, freq)))
+        Paragraph::new(Span::raw(cpu_name))
             .style(Style::default().fg(ratatui::style::Color::White)),
         Rect::new(inner.x, y, inner.width, 1),
     );
@@ -52,8 +51,8 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, _mode: DisplayMode,
     // Add empty row for spacing
     y = y.saturating_add(1);
 
-    // Display temperature widget with fan speed and power
-    let mut temp_parts = Vec::new();
+    // Display clock, plus temperature, fan speed and power where available
+    let mut temp_parts = vec![format!("Clock: {}", format_frequency(data.frequency))];
 
     if let Some(temp) = data.temperature {
         temp_parts.push(format!("Temp: {:.0}°C", temp));
@@ -67,12 +66,14 @@ pub fn render_cpu(f: &mut Frame, area: Rect, data: &CpuData, _mode: DisplayMode,
         temp_parts.push(format!("Power: {}W", power));
     }
 
-    if !temp_parts.is_empty() {
-        let temp_text = temp_parts.join("  ");
-        f.render_widget(
-            Paragraph::new(Span::raw(temp_text))
-                .style(Style::default().fg(ratatui::style::Color::Yellow)),
-            Rect::new(inner.x, y, inner.width, 1),
-        );
+    // Compact mode only has room for name and usage
+    if y >= inner.bottom() {
+        return;
     }
+
+    f.render_widget(
+        Paragraph::new(Span::raw(temp_parts.join("  ")))
+            .style(Style::default().fg(ratatui::style::Color::Yellow)),
+        Rect::new(inner.x, y, inner.width, 1),
+    );
 }

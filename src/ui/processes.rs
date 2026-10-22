@@ -69,8 +69,10 @@ fn render_process_column(
         }
 
         // Truncate process name if too long
-        let name = if process.name.len() > name_width {
-            format!("{}...", &process.name[..name_width.saturating_sub(3)])
+        // Count chars, not bytes: slicing a non-ASCII name at a byte index panics
+        let name = if process.name.chars().count() > name_width {
+            let truncated: String = process.name.chars().take(name_width.saturating_sub(3)).collect();
+            format!("{}...", truncated)
         } else {
             format!("{:<width$}", process.name, width = name_width)
         };
@@ -88,5 +90,24 @@ fn render_process_column(
         );
         
         y += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::{backend::TestBackend, Terminal};
+
+    #[test]
+    fn test_non_ascii_process_name_does_not_panic() {
+        let processes = vec![ProcessData {
+            name: "ž".repeat(40),
+            cpu_usage: 1.0,
+            memory_usage: 1.0,
+        }];
+        let mut terminal = Terminal::new(TestBackend::new(100, 10)).unwrap();
+        terminal
+            .draw(|f| render_processes(f, f.area(), &processes))
+            .unwrap();
     }
 }

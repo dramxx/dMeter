@@ -1,7 +1,8 @@
 [package]
 name = "dmeter"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+rust-version = "1.88"
 authors = ["dMeter Contributors"]
 description = "A fast, beautiful terminal system monitor built with Rust"
 license = "MIT"
@@ -11,19 +12,18 @@ categories = ["command-line-utilities"]
 readme = "README.md"
 
 [dependencies]
-ratatui = "0.28"
-crossterm = "0.28"
-sysinfo = "0.32"
-toml = "0.8"
-dirs = "5"
+ratatui = "0.30"
+crossterm = "0.29"
+sysinfo = "0.38"
+toml = "1"
+dirs = "7"
 clap = { version = "4", features = ["derive"] }
 chrono = "0.4"
-log = "0.4"
-env_logger = "0.11"
 serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
-nvml-wrapper = "0.10"
+nvml-wrapper = "0.13"
+windows-sys = { version = "0.61", features = ["Win32_System_ProcessStatus", "Win32_System_Performance"] }
 
 [profile.release]
 opt-level = 3
